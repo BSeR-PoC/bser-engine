@@ -45,7 +45,7 @@ public class ServerOperations {
 	public ServerOperations() {
 	}
 	
-	@Operation(name="$process-message-bser")
+	@Operation(name="$process-message")
 	public Bundle processMessageOperation(
 			@OperationParam(name="content") Bundle theContent,
 			@OperationParam(name="async") BooleanType theAsync,

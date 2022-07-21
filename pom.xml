@@ -31,8 +31,9 @@
 	</repositories>
 
 	<properties>
-		<hapi_stable_version>5.6.0</hapi_stable_version>
+		<hapi_stable_version>5.7.0</hapi_stable_version>
 		<bser_library_version>0.0.1-STU1</bser_library_version>
+		<smartonfhir-helper-version>0.0.1</smartonfhir-helper-version>
 
 		<!-- configure timestamp in MANIFEST.MF for maven-war-provider -->
 		<maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
@@ -56,7 +57,7 @@
 		<spring_data_version>2.2.0.RELEASE</spring_data_version>
 		<spring-boot.version>2.2.0.RELEASE</spring-boot.version>
 
-		<thymeleaf-version>3.1.0.M1</thymeleaf-version>
+		<thymeleaf-version>3.0.14.RELEASE</thymeleaf-version>
 
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<ebay_cors_filter_version>1.0.1</ebay_cors_filter_version>
@@ -70,6 +71,11 @@
 			<groupId>edu.gatech.chai</groupId>
 			<artifactId>BSER_javalib</artifactId>
 			<version>${bser_library_version}</version>
+		</dependency>
+		<dependency>
+			<groupId>edu.gatech.chai</groupId>
+			<artifactId>smartonfhir-helper-client</artifactId>
+			<version>${smartonfhir-helper-version}</version>
 		</dependency>
 
 		<!-- Include the HAPI server framework -->
@@ -347,8 +353,7 @@
 
 	<build>
 
-		<!-- Tells Maven to name the generated WAR file as restful-server-example.war -->
-		<finalName>bser-engine-server</finalName>
+		<finalName>bser-engine</finalName>
 
 		<!-- The following is not required for the application to build, but allows 
 			you to test it by issuing "mvn jetty:run" from the command line. -->
@@ -363,11 +368,18 @@
 		</pluginManagement>
 
 		<plugins>
-			<!-- Tell Maven which Java source version you want to use -->
+			<plugin>
+            	<groupId>org.apache.maven.plugins</groupId>
+            	<artifactId>maven-war-plugin</artifactId>
+            	<version>3.3.1</version>
+            	<configuration>
+                	<failOnMissingWebXml>false</failOnMissingWebXml>
+            	</configuration>
+        	</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.8.0</version>
+				<version>3.8.1</version>
 				<configuration>
 					<source>1.8</source>
 					<target>1.8</target>
