@@ -24,7 +24,7 @@
 	<context-param>
 		<param-name>contextConfigLocation</param-name>
 		<param-value>
-			edu.gatech.chai.omoponfhir.config.FhirServerConfig
+			edu.gatech.chai.bserengine.config.FhirServerConfig
 		</param-value>
 	</context-param>
 	<servlet>
@@ -36,5 +36,25 @@
 	<servlet-mapping>
 		<servlet-name>fhirServlet</servlet-name>
 		<url-pattern>/fhir/*</url-pattern>
+	</servlet-mapping>
+
+	<servlet>
+		<servlet-name>supportingApi</servlet-name>
+		<servlet-class>org.springframework.web.servlet.DispatcherServlet
+		</servlet-class>
+		<init-param>
+			<param-name>contextClass</param-name>
+			<param-value>org.springframework.web.context.support.AnnotationConfigWebApplicationContext
+			</param-value>
+		</init-param>
+		<init-param>
+			<param-name>contextConfigLocation</param-name>
+			<param-value>edu.gatech.chai.bserengine.config.SupportingApiConfig</param-value>
+		</init-param>
+		<load-on-startup>2</load-on-startup>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>supportingApi</servlet-name>
+		<url-pattern>/support/*</url-pattern>
 	</servlet-mapping>
 </web-app>

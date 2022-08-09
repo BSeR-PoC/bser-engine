@@ -7,7 +7,8 @@ import java.util.List;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
@@ -20,17 +21,14 @@ import ca.uhn.fhir.rest.server.IServerAddressStrategy;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.interceptor.CorsInterceptor;
 import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
-import edu.gatech.chai.SmartBackendServices;
 import edu.gatech.chai.bserengine.provider.ServerOperations;
 import edu.gatech.chai.bserengine.security.OIDCInterceptor;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
 
+
 @WebServlet(urlPatterns = { "/fhir/*" }, displayName = "FHIR Server")
 public class RestfulServerWithOpenApi extends RestfulServer {
     private static final long serialVersionUID = 1L;
-
-	@Autowired
-	SmartBackendServices smartBackendServices;
 
     public RestfulServerWithOpenApi() {
         super(StaticValues.myFhirContext);

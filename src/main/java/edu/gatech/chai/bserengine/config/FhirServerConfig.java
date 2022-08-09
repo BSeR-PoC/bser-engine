@@ -16,21 +16,11 @@
 package edu.gatech.chai.bserengine.config;
 
 import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.ComponentScans;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.ImportResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @Configuration
 @EnableScheduling
-@EnableTransactionManagement
-@ComponentScans(value = { @ComponentScan("edu.gatech.chai.omopv5.dba.config"),
-		@ComponentScan("edu.gatech.chai.omopv5.dba.service"),
-		@ComponentScan("edu.gatech.chai.omoponfhir.smart.dao"),
-		@ComponentScan("edu.gatech.chai.omoponfhir.local.task")})
-@ImportResource({
-    "classpath:database-config.xml"
-})
+@ComponentScan("edu.gatech.chai.SmartOnFhirClient")
 public class FhirServerConfig {
 }
