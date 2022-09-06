@@ -5,10 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import javax.servlet.ServletException;
-import javax.servlet.annotation.WebServlet;
 
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
@@ -25,8 +22,6 @@ import edu.gatech.chai.bserengine.provider.ServerOperations;
 import edu.gatech.chai.bserengine.security.OIDCInterceptor;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
 
-
-@WebServlet(urlPatterns = { "/fhir/*" }, displayName = "FHIR Server")
 public class RestfulServerWithOpenApi extends RestfulServer {
     private static final long serialVersionUID = 1L;
 
