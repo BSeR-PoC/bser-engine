@@ -1034,11 +1034,6 @@ public class ServerOperations {
 			sendOO("Endpoint", "Endpoint for recipient is null");
 		}
 		
-		// Save ServiceRequest, Task, and Message before submission.
-		saveResource(serviceRequet);
-		saveResource(bserReferralTask);
-		saveResource(messageBundle);
-
 		// Submit to target $process-message operation
 		FhirContext ctx = StaticValues.myFhirContext; 
 		IParser parser = ctx.newJsonParser();
@@ -1060,22 +1055,11 @@ public class ServerOperations {
 			}
 		}
 
-		// Save this message bundle, serviceRequest, and referral task
-		// if (!fhirStore.equalsIgnoreCase(targetEndpointUrl)) {
-		// 	logger.info("SAVING TO " + fhirStore + ":\n" + messageBundleJson);
-		// 	client = ctx.newRestfulGenericClient(fhirStore);
-		// 	IBaseResource response = client
-		// 		.operation()
-		// 		.processMessage() // New operation for sending messages
-		// 		.setMessageBundle(messageBundle)
-		// 		.asynchronous(Bundle.class)
-		// 		.execute();
-
-		// 	if (response instanceof OperationOutcome) {
-		// 		throw new InternalErrorException("Message submitted but failed to save in " + fhirStore, (IBaseOperationOutcome) response);
-		// 	}
-		// }
-		
+		// Save ServiceRequest, Task, and Message before submission.
+		saveResource(serviceRequet);
+		saveResource(bserReferralTask);
+		saveResource(messageBundle);
+				
 		// return anything if needed in Parameters
 		Parameters returnParameters = new Parameters();
 		returnParameters.addParameter("referral_request", new Reference(messageBundle.getIdElement()));
