@@ -29,7 +29,7 @@
 	</context-param>
 	<servlet>
 		<servlet-name>fhirServlet</servlet-name>
-		<servlet-class>edu.gatech.chai.bserengine.config.RestfulServerWithOpenApi
+		<servlet-class>edu.gatech.chai.bserengine.servlet.RestfulServerWithOpenApi
 		</servlet-class>
 		<load-on-startup>1</load-on-startup>
 	</servlet>
