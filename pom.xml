@@ -359,7 +359,6 @@
 	</dependencies>
 
 	<build>
-
 		<finalName>bser-engine</finalName>
 
 		<!-- The following is not required for the application to build, but allows 
