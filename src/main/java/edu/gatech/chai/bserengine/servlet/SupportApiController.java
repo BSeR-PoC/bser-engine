@@ -47,7 +47,7 @@ public class SupportApiController {
 
         try {
             retVal = smartBackendServices.getJWKS();
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             OperationOutcome oo = new OperationOutcome();
             Narrative narrative = new Narrative();
