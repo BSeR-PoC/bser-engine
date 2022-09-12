@@ -1082,6 +1082,8 @@ public class ServerOperations {
 					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
 				}
 			}
+		} else {
+			warningMessage = warningMessage.concat("Referral Request has NOT been submitted. Submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false");
 		}
 
 		// Save ServiceRequest, Task, and Message before submission.
