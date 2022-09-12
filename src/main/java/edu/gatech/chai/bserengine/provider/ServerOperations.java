@@ -554,6 +554,10 @@ public class ServerOperations {
 			}
 		}
 
+		if (targetEhrPractitionerRole == null || targetEhrPractitionerRole.isEmpty()) {
+			sendOO("ServiceRequest.performer", "The ServiceRequest.performer: " + targetReference.getReference() + " does not seem to exist.");
+		}
+
 		// Create BSER recipient PractitionerRole
 		targetPractitionerRole = new BSERReferralRecipientPractitionerRole();
 		targetEhrPractitionerRole.copyValues(targetPractitionerRole);
