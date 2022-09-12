@@ -266,6 +266,22 @@ public class ServerOperations {
 		resource.setId(createResponse.getId());
 	}
 
+	private void updateResource (IBaseResource resource) {
+		IGenericClient genericClient = StaticValues.myFhirContext.newRestfulGenericClient(fhirStore);
+		if (smartBackendServices.setFhirServerUrl(fhirStore).isActive()) {
+			BearerTokenAuthInterceptor authInterceptor = getBearerTokenAuthInterceptor();
+			genericClient.registerInterceptor(authInterceptor);
+		}
+
+		MethodOutcome updateResponse = genericClient.update().resource(resource).execute();
+		IBaseOperationOutcome oo = updateResponse.getOperationOutcome();
+		if (oo != null) {
+			throw new FHIRException("BSeR enginen failed to persist external resource, " + resource.getIdElement().toString());
+		}
+
+		resource.setId(updateResponse.getId());
+	}
+
 	private void sendOO(String fhirPath, String msg) {
 		OperationOutcome oo = new OperationOutcome();
 		oo.setId(UUID.randomUUID().toString());
@@ -425,6 +441,16 @@ public class ServerOperations {
 			theServiceRequest.setStatus(ServiceRequestStatus.ACTIVE);
 		}
 
+		// Create a task and add ServiceRequest to task.focus
+		// We may not have the complete service request. This is from UI. Create Service Request and copy current ones to
+		// newly created service request. 
+		BSERReferralServiceRequest serviceRequest = new BSERReferralServiceRequest();
+		theServiceRequest.copyValues(serviceRequest);
+
+		if (serviceRequest.getIdElement() == null || serviceRequest.getIdElement().isEmpty()) {
+			sendOO("ServiceRequest.id", "Does ServiceRequest have id?");
+		}
+
 		// Get fhirStore Url.
 		if (theBserProviderBaseUrl != null) {
 			fhirStore = theBserProviderBaseUrl.getValue();
@@ -436,7 +462,7 @@ public class ServerOperations {
 		}
 
 		// Sanity check on the ServiceRequest.subject is patient, and it matches with the received Patient resource.
-		subjectReference = theServiceRequest.getSubject();
+		subjectReference = serviceRequest.getSubject();
 		if (!"Patient".equals(subjectReference.getReferenceElement().getResourceType())) {
 			sendOO("ServiceRequest.subject", "Subject must be Patient");
 		}
@@ -452,7 +478,7 @@ public class ServerOperations {
 
 		// Get the initator PractitionerRole resource. This is ServiceRequest.requester.
 		// MDI IG users PractitionerRole. First check the requester if it's practitioner or practitionerRole
-		Reference requesterReference = theServiceRequest.getRequester();
+		Reference requesterReference = serviceRequest.getRequester();
 		if (requesterReference == null || requesterReference.isEmpty()) {
 			sendOO("ServiceRequest.requester", "Requester is NULL");
 		}
@@ -531,7 +557,7 @@ public class ServerOperations {
 		}
 		
 		// Get target (or recipient) practitioner resource. include practitioner, organization, endpoint, and healthService resources.
-		targetReference = theServiceRequest.getPerformerFirstRep();
+		targetReference = serviceRequest.getPerformerFirstRep();
 		searchBundle = searchResourceFromFhirServer(
 			targetReference.getReferenceElement().getBaseUrl(), 
 			PractitionerRole.class, 
@@ -923,17 +949,16 @@ public class ServerOperations {
 		bSERReferralRequestDocumentBundle.setId(new IdType(bSERReferralRequestDocumentBundle.fhirType(), UUID.randomUUID().toString()));
 		bSERReferralRequestDocumentBundle.addEntry(new BundleEntryComponent().setFullUrl(((Bundle)supportingInfo).getIdElement().getValue()).setResource((Bundle)supportingInfo));
 
-		theServiceRequest.addSupportingInfo(new Reference(bSERReferralRequestDocumentBundle.getIdElement()));		
+		serviceRequest.addSupportingInfo(new Reference(bSERReferralRequestDocumentBundle.getIdElement()));		
 
-		// Create a task and add ServiceRequest to task.focus
-		// We may not have the complete service request. This is from UI. Create Service Request and copy current ones to
-		// newly created service request. 
-		BSERReferralServiceRequest serviceRequet = new BSERReferralServiceRequest();
-		serviceRequet.addIdentifiers(sourcePractitionerRole, targetPractitionerRole);
-		theServiceRequest.copyValues(serviceRequet);
+		serviceRequest.addIdentifiers(sourcePractitionerRole, targetPractitionerRole);
 
-		// theServiceRequest, which is from UI has Practitioner for the requester. Overwrite this with parctitionerRole.
-		serviceRequet.setRequester(sourceReference);
+		// serviceRequest, which is from UI has Practitioner for the requester. Overwrite this with parctitionerRole.
+		serviceRequest.setRequester(sourceReference);
+
+		updateResource(serviceRequest);
+
+// TODO:
 
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
 			sourcePractitionerRole.getId(), 
@@ -942,7 +967,7 @@ public class ServerOperations {
 			(targetOrganization == null || targetOrganization.isEmpty())?null:new Reference(targetOrganization.getIdElement()),
 			TaskStatus.REQUESTED, 
 			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "7.0", "Service Request Fulfillment Completed")), 
-			new Reference(serviceRequet.getIdElement()), 
+			new Reference(serviceRequest.getIdElement()), 
 			new Date(), 
 			sourceReference, 
 			targetReference);
@@ -969,7 +994,7 @@ public class ServerOperations {
 		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(bserReferralTask.getIdElement().getValue()).setResource(bserReferralTask));
 
 		// Service Request (task.focus)
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(serviceRequet.getIdElement().getValue()).setResource(serviceRequet));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(serviceRequest.getIdElement().getValue()).setResource(serviceRequest));
 
 		// Referral Request Document Bundle (serviceRequest.supprotingInfo).
 		// The refferral request document bundle includes resources as well. Those are taken care of when this bundle is created above.
@@ -1062,7 +1087,6 @@ public class ServerOperations {
 		}
 
 		// Save ServiceRequest, Task, and Message before submission.
-		saveResource(serviceRequet);
 		saveResource(bserReferralTask);
 		saveResource(messageBundle);
 				
