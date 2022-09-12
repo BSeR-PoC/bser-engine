@@ -1040,18 +1040,20 @@ public class ServerOperations {
 		String messageBundleJson = parser.encodeResourceToString(messageBundle);
 		logger.info("SENDING TO " + targetEndpointUrl + ":\n" + messageBundleJson);
 
-		IGenericClient client;
-		if (targetEndpointUrl != null && !targetEndpointUrl.isBlank()) {
-			client = ctx.newRestfulGenericClient(targetEndpointUrl);
-			IBaseResource response = client
-				.operation()
-				.processMessage() // New operation for sending messages
-				.setMessageBundle(messageBundle)
-				.asynchronous(Bundle.class)
-				.execute();
-		
-			if (response instanceof OperationOutcome) {
-				throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
+		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
+			IGenericClient client;
+			if (targetEndpointUrl != null && !targetEndpointUrl.isBlank()) {
+				client = ctx.newRestfulGenericClient(targetEndpointUrl);
+				IBaseResource response = client
+					.operation()
+					.processMessage() // New operation for sending messages
+					.setMessageBundle(messageBundle)
+					.asynchronous(Bundle.class)
+					.execute();
+			
+				if (response instanceof OperationOutcome) {
+					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
+				}
 			}
 		}
 
