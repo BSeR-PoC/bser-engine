@@ -1091,7 +1091,9 @@ public class ServerOperations {
 		// return anything if needed in Parameters
 		Parameters returnParameters = new Parameters();
 		returnParameters.addParameter("referral_request", new Reference(messageBundle.getIdElement()));
-		returnParameters.addParameter("warning", warningMessage);
+		if (warningMessage != null && !warningMessage.isBlank()) {
+			returnParameters.addParameter("warning", warningMessage);
+		}
 	
 		return returnParameters;
 	}
