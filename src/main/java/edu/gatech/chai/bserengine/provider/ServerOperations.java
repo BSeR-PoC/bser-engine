@@ -418,6 +418,7 @@ public class ServerOperations {
 		Reference sourceOrganizationReference = null;
 		HealthcareService targetHealthService = null;
 		String targetEndpointUrl = null;
+		String warningMessage = new String();
 
 		/*
 		 * When referral request is received, capture the following information.
@@ -434,11 +435,9 @@ public class ServerOperations {
 			sendOO("Parameters.parameter.where(name='referral').empty()", "Referral is missing");
 		}
 
-		// If we received this request, it means we are submitting the referral. 
-		// Change the status to ACTIVE.
-		if (theServiceRequest.getStatus() != ServiceRequestStatus.ACTIVE) {
-			// Set the status to ACTIVE before we submit the referral
-			theServiceRequest.setStatus(ServiceRequestStatus.ACTIVE);
+		// If we received this request, it means we are submitting the referral so it shouldn't be ACTIVE
+		if (theServiceRequest.getStatus() == ServiceRequestStatus.ACTIVE) {
+			warningMessage = warningMessage.concat("The referral request has its status already set to ACTIVE. ");
 		}
 
 		// Create a task and add ServiceRequest to task.focus
@@ -446,6 +445,7 @@ public class ServerOperations {
 		// newly created service request. 
 		BSERReferralServiceRequest serviceRequest = new BSERReferralServiceRequest();
 		theServiceRequest.copyValues(serviceRequest);
+		serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
 
 		if (serviceRequest.getIdElement() == null || serviceRequest.getIdElement().isEmpty()) {
 			sendOO("ServiceRequest.id", "Does ServiceRequest have id?");
@@ -958,8 +958,6 @@ public class ServerOperations {
 
 		updateResource(serviceRequest);
 
-// TODO:
-
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
 			sourcePractitionerRole.getId(), 
 			targetPractitionerRole.getId(), 
@@ -1093,6 +1091,7 @@ public class ServerOperations {
 		// return anything if needed in Parameters
 		Parameters returnParameters = new Parameters();
 		returnParameters.addParameter("referral_request", new Reference(messageBundle.getIdElement()));
+		returnParameters.addParameter("warning", warningMessage);
 	
 		return returnParameters;
 	}
