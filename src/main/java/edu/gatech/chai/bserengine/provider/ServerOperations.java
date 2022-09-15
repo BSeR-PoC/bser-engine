@@ -573,6 +573,8 @@ public class ServerOperations {
 			sourceEhrOrganization.copyValues(sourceOrganization);
 		} else {
 			sourceOrganization.setId(new IdType(sourceOrganization.fhirType(), UUID.randomUUID().toString()));
+
+			saveResource(sourceOrganization);
 		}
 
 		sourceOrganizationReference = new Reference(sourceOrganization.getIdElement());
@@ -654,6 +656,8 @@ public class ServerOperations {
 			educationLevel.setId(new IdType(educationLevel.fhirType(), UUID.randomUUID().toString()));
 			educationLevel.setStatus(ObservationStatus.FINAL);
 			educationLevel.setSubject(subjectReference);
+
+			saveResource(educationLevel);
 		}
 
 		ODHEmploymentStatus odhEmploymentStatus =  null;
@@ -664,6 +668,8 @@ public class ServerOperations {
 			odhEmploymentStatus.setStatus(ObservationStatus.FINAL);
 			odhEmploymentStatus.setValue(new CodeableConcept(new Coding("http://terminology.hl7.org/CodeSystem/v3-ObservationValue", theEmploymentStatus.getCode(), null)));
 			odhEmploymentStatus.setSubject(subjectReference);
+
+			saveResource(odhEmploymentStatus);
 		}
 
 		IBaseBundle supportingInfo = null;
