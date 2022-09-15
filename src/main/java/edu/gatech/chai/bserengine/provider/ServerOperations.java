@@ -642,6 +642,10 @@ public class ServerOperations {
 		} else {
 			throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
 		}
+
+		if (!targetEndpointUrl.endsWith("$process-message")) {
+			warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. ");
+		}
 		
 		// Create BSER recipient PractitionerRole
 		targetPractitionerRole = new BSERReferralRecipientPractitionerRole();
@@ -1162,9 +1166,9 @@ public class ServerOperations {
 
 		// Submit to target $process-message operation
 		FhirContext ctx = StaticValues.myFhirContext; 
-		IParser parser = ctx.newJsonParser();
-		String messageBundleJson = parser.encodeResourceToString(messageBundle);
-		logger.info("SENDING TO " + targetEndpointUrl + ":\n" + messageBundleJson);
+		// IParser parser = ctx.newJsonParser();
+		// String messageBundleJson = parser.encodeResourceToString(messageBundle);
+		// logger.info("SENDING TO " + targetEndpointUrl + ":\n" + messageBundleJson);
 
 		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
 			IGenericClient client;
@@ -1191,6 +1195,9 @@ public class ServerOperations {
 		// return anything if needed in Parameters
 		Parameters returnParameters = new Parameters();
 		returnParameters.addParameter("referral_request", new Reference(messageBundle.getIdElement()));
+		ParametersParameterComponent recipientParam = new ParametersParameterComponent(new StringType("recipient_endpoint"));
+		recipientParam.setResource(targetEndpoint);
+		returnParameters.addParameter(recipientParam);
 		if (warningMessage != null && !warningMessage.isBlank()) {
 			returnParameters.addParameter("warning", warningMessage);
 		}
