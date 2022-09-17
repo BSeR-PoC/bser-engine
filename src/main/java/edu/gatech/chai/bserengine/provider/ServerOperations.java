@@ -555,7 +555,9 @@ public class ServerOperations {
 
 		// Create BSER initator PractitionerRole
 		sourcePractitionerRole = new BSERReferralInitiatorPractitionerRole();
-		sourceEhrPractitionerRole.copyValues(sourcePractitionerRole);
+		if (sourceEhrPractitionerRole != null && !sourceEhrPractitionerRole.isEmpty()) {
+			sourceEhrPractitionerRole.copyValues(sourcePractitionerRole);
+		}
 
 		// BSeR IG requires Organization for InitiatorPractitionerRole
 		// http://build.fhir.org/ig/HL7/bser/StructureDefinition-BSeR-ReferralInitiatorPractitionerRole.html
@@ -573,7 +575,7 @@ public class ServerOperations {
 		sourcePractitionerRole.setOrganization(sourceOrganizationReference);
 
 		// We must provide Endpoint so that recipient can find the endpoint to send feedback back.
-		String bserEndpointProcessMessageUrl;
+		String bserEndpointProcessMessageUrl = null;
 		if (bserEndpointUrl.endsWith("/")) {
 			bserEndpointProcessMessageUrl = bserEndpointUrl+"$process-message";
 		} else {
@@ -636,7 +638,12 @@ public class ServerOperations {
 		}
 
 		if (!targetEndpointUrl.endsWith("$process-message")) {
-			warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. ");
+			warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. The $process-message is prepended");
+			if (targetEndpointUrl.endsWith("/")) {
+				targetEndpointUrl = targetEndpointUrl.concat("$process-message");
+			} else {
+				targetEndpointUrl = targetEndpointUrl.concat("/$process-message");
+			}
 		}
 		
 		// Create BSER recipient PractitionerRole
@@ -975,13 +982,7 @@ public class ServerOperations {
 			}
 			
 		} else {
-			OperationOutcome oo = new OperationOutcome();
-			oo.setId(UUID.randomUUID().toString());
-			OperationOutcomeIssueComponent ooic = new OperationOutcomeIssueComponent();
-			ooic.setSeverity(IssueSeverity.ERROR);
-			ooic.setCode(IssueType.REQUIRED);
-			oo.addIssue(ooic);
-			throw new InternalErrorException("ServiceType is missing", oo);
+			throw new FHIRException("ServiceType is missing.");
 		}
 
 		Reference supportingInfoReference = new Reference(supportingInfo.getIdElement());
