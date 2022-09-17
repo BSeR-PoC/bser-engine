@@ -557,6 +557,12 @@ public class ServerOperations {
 		sourcePractitionerRole = new BSERReferralInitiatorPractitionerRole();
 		if (sourceEhrPractitionerRole != null && !sourceEhrPractitionerRole.isEmpty()) {
 			sourceEhrPractitionerRole.copyValues(sourcePractitionerRole);
+		} else {
+			sourcePractitionerRole.setId(new IdType(sourcePractitionerRole.fhirType(), UUID.randomUUID().toString()));
+		}
+
+		if (sourceReference == null || sourceReference.isEmpty()) {
+			sourceReference = new Reference(sourcePractitionerRole.getIdElement());
 		}
 
 		// BSeR IG requires Organization for InitiatorPractitionerRole
@@ -638,7 +644,7 @@ public class ServerOperations {
 		}
 
 		if (!targetEndpointUrl.endsWith("$process-message")) {
-			warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. The $process-message is prepended");
+			warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. The $process-message is prepended. ");
 			if (targetEndpointUrl.endsWith("/")) {
 				targetEndpointUrl = targetEndpointUrl.concat("$process-message");
 			} else {
@@ -1181,7 +1187,7 @@ public class ServerOperations {
 				}
 			}
 		} else {
-			warningMessage = warningMessage.concat("Referral Request has NOT been submitted. Submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false");
+			warningMessage = warningMessage.concat("Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
 		}
 
 		// Save Message before submission.
