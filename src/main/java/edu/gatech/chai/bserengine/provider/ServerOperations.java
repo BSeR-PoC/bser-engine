@@ -51,8 +51,7 @@ import org.hl7.fhir.r4.model.Practitioner;
 import org.hl7.fhir.r4.model.PractitionerRole;
 import org.hl7.fhir.r4.model.Quantity;
 import org.hl7.fhir.r4.model.Reference;
-import org.hl7.fhir.r4.model.MessageHeader.MessageHeaderResponseComponent;
-import org.hl7.fhir.r4.model.MessageHeader.ResponseType;
+import org.hl7.fhir.r4.model.MessageHeader.MessageDestinationComponent;
 import org.hl7.fhir.r4.model.Observation.ObservationStatus;
 import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
 import org.hl7.fhir.r4.model.OperationOutcome.IssueType;
@@ -67,16 +66,12 @@ import org.json.JSONObject;
 import org.springframework.web.context.ContextLoaderListener;
 import org.springframework.web.context.WebApplicationContext;
 
-import com.github.dockerjava.zerodep.shaded.org.apache.hc.core5.http.Message;
-import com.mchange.v1.identicator.Identicator;
-
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.r4.model.Bundle.BundleType;
 import org.hl7.fhir.r4.model.Composition.CompositionStatus;
 import org.hl7.fhir.r4.model.Endpoint.EndpointStatus;
 import org.hl7.fhir.r4.model.Enumerations.AdministrativeGender;
 import org.hl7.fhir.r4.model.Resource;
-import org.hl7.fhir.r4.model.ResourceType;
 import org.hl7.fhir.r4.model.ServiceRequest;
 import org.hl7.fhir.r4.model.StringType;
 import org.hl7.fhir.r4.model.Task;
@@ -85,10 +80,8 @@ import org.hl7.fhir.r4.model.UriType;
 import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.exceptions.FHIRFormatError;
 import org.hl7.fhir.instance.model.api.IBaseBundle;
-import org.hl7.fhir.instance.model.api.IBaseMetaType;
 import org.hl7.fhir.instance.model.api.IBaseOperationOutcome;
 import org.hl7.fhir.instance.model.api.IBaseResource;
-import org.hl7.fhir.instance.model.api.IPrimitiveType;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.model.api.Include;
@@ -129,7 +122,6 @@ import edu.gatech.chai.FHIR.model.BodyWeight;
 import edu.gatech.chai.SmartOnFhirClient.SmartBackendServices;
 import edu.gatech.chai.USCore.model.USCoreAllergyIntolerance;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
-import edu.gatech.chai.bserengine.utilities.ThrowFHIRExceptions;
 
 public class ServerOperations {
 	private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ServerOperations.class);
@@ -1051,12 +1043,13 @@ public class ServerOperations {
 		// identifier that recipient can use to identify this request. And, Recipient can
 		// echo this for us to use to search our fhirStore.
 		String uniqueIdentifierValue = UUID.randomUUID().toString();
-		serviceRequest.setInitiatorIdentifier("urn:bser:request:id", uniqueIdentifierValue, sourceOrganizationReference);
+		String identifierSystem = "urn:bser:request:id";
+		serviceRequest.setInitiatorIdentifier(identifierSystem, uniqueIdentifierValue, sourceOrganizationReference);
 		Reference targetOrganizationReference = (targetOrganization == null || targetOrganization.isEmpty())?null:new Reference(targetOrganization.getIdElement());
 
 		// Set the recipient identifier. This is an optional. If we have organization information, set this identifier.
 		if (targetOrganizationReference != null && !targetOrganizationReference.isEmpty()) {
-			serviceRequest.setRecipientIdentifier("urn:bser:request:id", uniqueIdentifierValue, targetOrganizationReference);
+			serviceRequest.setRecipientIdentifier(identifierSystem, uniqueIdentifierValue, targetOrganizationReference);
 		}
 
 		serviceRequest.setOccurrence(new DateTimeType(new Date()));
@@ -1064,8 +1057,8 @@ public class ServerOperations {
 		updateResource(serviceRequest);
 
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
-			sourcePractitionerRole.getIdElement().toVersionless().getValue(), 
-			targetPractitionerRole.getIdElement().toVersionless().getValue(), 
+			identifierSystem, uniqueIdentifierValue,
+			identifierSystem, uniqueIdentifierValue,
 			sourceOrganizationReference, 
 			targetOrganizationReference,
 			TaskStatus.REQUESTED, 
@@ -1177,6 +1170,7 @@ public class ServerOperations {
 				IBaseResource response = client
 					.operation()
 					.processMessage() // New operation for sending messages
+					.setResponseUrlParam(bserEndpointProcessMessageUrl)
 					.setMessageBundle(messageBundle)
 					.asynchronous(Bundle.class)
 					.execute();
@@ -1230,188 +1224,141 @@ public class ServerOperations {
 		@OperationParam(name="async") BooleanType theAsync,
 		@OperationParam(name="response-url") UriType theUri			
 	) {
-		Bundle retVal = new Bundle();
-		MessageHeader messageHeader = null;
-		List<Resource> resources = new ArrayList<Resource>();
+		// Feedback would also be async as there can be another message.
+		if (theAsync == null) {
+			throw new FHIRException("async parameter must exist");
+		}
+		if (!theAsync.booleanValue()) {
+			throw new FHIRException("BSERReferralFeedback Messageing must have async set to true.");
+		}
 
-		Reference senderPractitionerRoleReference = null;
-		Reference referralTaskReference = null;
-		BSERReferralRecipientPractitionerRole bserReferralRecipientPractitionerRole = null;
-		BSERReferralInitiatorPractitionerRole bserReferralInitiatorPractitionerRole = null;
+		// String recipientEndpointUrl;
+		// if (theUri != null && !theUri.isEmpty()) {
+		// 	recipientEndpointUrl = theUri.asStringValue();
+		// }
+
+		BSERReferralMessageHeader messageHeader = null;
+
+		Reference initiatorPractitionerRoleReference = null;
+
 		BSERReferralTask bserReferralTask = null;
+		Reference referralTaskReference = null;
+
+		if (theContent == null || theContent.isEmpty()) {
+			// content cannot be null or empty.
+			throw new FHIRException("content is either null or empty");
+		}
+
 		if (theContent.getType() == BundleType.MESSAGE) {
+			List<BundleEntryComponent> entries = theContent.getEntry();
+
 			// Evaluate the first entry, which must be MessageHeader
 			BundleEntryComponent entry1 = theContent.getEntryFirstRep();
 			Resource resource = entry1.getResource();
 			if (resource instanceof MessageHeader) {
-				// capture sender information
-				messageHeader = (MessageHeader) resource;
-				senderPractitionerRoleReference = messageHeader.getSender();
-				if (senderPractitionerRoleReference == null || senderPractitionerRoleReference.isEmpty()) {
+				// MessageHeader is like metadata for a message. Capture all the
+				// necessary information.
+				messageHeader = (BSERReferralMessageHeader) resource;
+				if (!BSERReferralMessageHeader.isBSERReferralMessageHeader(messageHeader)) {
+					throw new FHIRException("Received message is NOT REF/RRI - Patient referral");
+				}
+				// capture sender information. This should be recipient. But,
+				// the BSeR IG fixed this to be initiator. 
+				// For reverse direction (Recipient --> Initiator), sender and destination need to be swapped.
+				// For now, we just follow the IG
+				initiatorPractitionerRoleReference = messageHeader.getSender();
+				if (initiatorPractitionerRoleReference == null || initiatorPractitionerRoleReference.isEmpty()) {
 					throw new FHIRException("MessageHeader.sender is empty or does not exist");
+				}
+
+				MessageDestinationComponent destination = messageHeader.getDestinationFirstRep();
+				if (destination == null || destination.isEmpty()) {
+					throw new FHIRException("MessageHeader.destination is empty or does not exist");
 				}
 
 				referralTaskReference = messageHeader.getFocusFirstRep();
 				if (referralTaskReference == null || referralTaskReference.isEmpty()) {
 					throw new FHIRException("MessageHader.focus[0] is empty or does not exist.");
 				}
+
+				for (BundleEntryComponent entry : entries) {
+					resource = entry.getResource();
+					if (resource instanceof Task) {
+						if (entry.getFullUrl().contains(referralTaskReference.getId())) {
+							bserReferralTask = (BSERReferralTask) entry.getResource();
+							break;
+						}
+	
+					} 						
+				}
+
+				if (bserReferralTask == null || !bserReferralTask.isEmpty()) {
+					throw new FHIRException("BSERReferralTask cannot be found from the MessageBundle entries.");
+				}
+
 			} else {
 				throw new FHIRFormatError("The bundle must be a MESSAGE type");
 			}
 
-			List<BundleEntryComponent> entries = theContent.getEntry();
+			TaskOutputComponent outputFromRecipient = bserReferralTask.getOutputFirstRep();
+			if (outputFromRecipient == null || outputFromRecipient.isEmpty()) {
+				throw new FHIRFormatError("BSERReferralTask.output is null or Empty");
+			} 
+
+			Reference bserFeedbackDocumentReference = (Reference) outputFromRecipient.getValue();
+			if (bserFeedbackDocumentReference == null || bserFeedbackDocumentReference.isEmpty()) {
+				throw new FHIRException("BSERReferralTask.output.valueReference cannot be null or empty.");
+			}
+			BSERReferralFeedbackDocument bserReferralFeedbackDocument = null;
 			for (BundleEntryComponent entry : entries) {
 				resource = entry.getResource();
-				if (resource instanceof Task) {
-					if (entry.getFullUrl().contains(referralTaskReference.getId())) {
-						bserReferralTask = (BSERReferralTask) resource;
+				if (resource instanceof Bundle) {
+					if (entry.getFullUrl().contains(bserFeedbackDocumentReference.getId())) {
+						bserReferralFeedbackDocument = (BSERReferralFeedbackDocument) entry.getResource();
+						break;
 					}
-				} else if (resource instanceof PractitionerRole) {
-					if (entry.getFullUrl().contains(senderPractitionerRoleReference.getId())) {
-						if (isProfile(resource, ServerOperations.BserReferralRecipientPractitionerRoleProfile)) {
-							bserReferralRecipientPractitionerRole = (BSERReferralRecipientPractitionerRole) resource;
-						} else if (isProfile(resource, ServerOperations.BserReferralInitiatorPractitionerRoleProfile)) {
-							bserReferralInitiatorPractitionerRole = (BSERReferralInitiatorPractitionerRole) resource;
-						}
-					}
-				}
+				} 
 			}
 
-			if (bserReferralTask == null || bserReferralTask.isEmpty()) {
-				throw new FHIRException("BSeR ReferralTask is empty or does not exit.");
+			if (bserReferralFeedbackDocument == null || bserReferralFeedbackDocument.isEmpty()) {
+				throw new FHIRException("BSERReferralTask.output.valueReference cannot be found in the entry resources.");
 			}
 
-			if (bserReferralRecipientPractitionerRole == null || bserReferralRecipientPractitionerRole.isEmpty()) {
-				throw new FHIRException("BSeR ReferralRecipientPractitionerRole is empty or does not exist.");
-			}
+			saveResource(bserReferralFeedbackDocument);
 
-			// We need to get ServiceRequest so we can use it to match with the task that was used
-			// to request referral. The actual ServiceRequest must be present in the bundle.
-			Reference serviceRequestReference = bserReferralTask.getFocus();
-			BSERReferralServiceRequest bserReferralServiceRequest = null;
+			BSERReferralTask bserReferralTaskFromFhirStore = (BSERReferralTask) pullResourceFromFhirServer(referralTaskReference);
+			bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
+
+			// We just stored BSER Referral Feedback Document. Relink this
+			bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralTask.getIdElement()));
+			updateResource(bserReferralTaskFromFhirStore);
+
+			// We also need to update ServiceRequest
+			Reference serviceRequestReference = bserReferralTaskFromFhirStore.getFocus();
+			BSERReferralServiceRequest referralServiceRequestInFeedback = null;
 			for (BundleEntryComponent entry : entries) {
 				resource = entry.getResource();
 				if (resource instanceof ServiceRequest) {
 					if (entry.getFullUrl().contains(serviceRequestReference.getId())) {
-						bserReferralServiceRequest = (BSERReferralServiceRequest) resource;
+						referralServiceRequestInFeedback = (BSERReferralServiceRequest) resource;
 					}
 				}
 			}
 
-			if (bserReferralServiceRequest == null || bserReferralServiceRequest.isEmpty()) {
+			if (referralServiceRequestInFeedback == null || referralServiceRequestInFeedback.isEmpty()) {
 				throw new FHIRException("Referral ServiceRequest is empty or does not exit.");
 			}
 
-			Reference subjectReference = bserReferralServiceRequest.getSubject();
-			Patient patient = null;
-			for (BundleEntryComponent entry : entries) {
-				resource = entry.getResource();
-				if (resource instanceof Patient) {
-					if (entry.getFullUrl().contains(subjectReference.getId())) {
-						patient = (Patient) resource;
-					}
-				}
-			}
+			// Now obtain the ServiceRequest from fhirStore.
+			BSERReferralServiceRequest bserReferralServiceRequestFromFhirStore = (BSERReferralServiceRequest) pullResourceFromFhirServer(serviceRequestReference);
+			referralServiceRequestInFeedback.copyValues(bserReferralServiceRequestFromFhirStore);
 
-			if (patient == null || patient.isEmpty()) {
-				throw new FHIRException("ServiceRequest.subject is empty or does not exist");
-			}
-
-			Bundle searchBundle = searchResourceFromFhirServer(
-				// requesterReference may be Practitioner. Ok to use this URL as both practitioner and practitionerRole hasve the same base URL
-				null, 
-				Task.class, 
-				Task.FOCUS.hasChainedProperty(ServiceRequest.SUBJECT.hasId(subjectReference.getReferenceElement())),
-				Task.INCLUDE_FOCUS);
-
-			BSERReferralTask bserTaskFromServer = null;
-			BSERReferralServiceRequest bserServiceRequestFromServer = null;
-			for (BundleEntryComponent entry : searchBundle.getEntry()) {
-				resource = entry.getResource();
-				if (resource instanceof Task) {
-					bserTaskFromServer = (BSERReferralTask) resource;
-				} else if (resource instanceof ServiceRequest) {
-					bserServiceRequestFromServer = (BSERReferralServiceRequest) resource;
-				}
-			}
-
-			if (bserTaskFromServer == null || bserTaskFromServer.isEmpty()) {
-				sendInternalErrorOO("MessageHeader.focus", "Referral Task does not exist in the local server");
-			}
-
-			// Update the task.
-			bserReferralTask.setId(bserTaskFromServer.getIdElement());
-			updateResource(bserReferralTask);
-
-			// Update the ServiceRequest
-			bserReferralServiceRequest.setId(bserServiceRequestFromServer.getIdElement());
-			updateResource(bserReferralServiceRequest);
-
-			// Now we add Feedback Document in the task.output
-			BSERReferralFeedbackDocument bserReferralFeedbackDocument = null;
-			Reference bserReferralFeedbackReference = null;
-			TaskOutputComponent bserReferralTaskOutput = bserReferralTask.getOutputFirstRep();
-			if (!bserReferralTaskOutput.isEmpty()) {
-				Type outputType = bserReferralTaskOutput.getValue();
-				if (outputType instanceof Reference) {
-					bserReferralFeedbackReference = (Reference) outputType;
-					if (bserReferralFeedbackReference != null && !bserReferralFeedbackReference.isEmpty()) {
-						throw new FHIRException("ReferralTask.output exists but valueReference does not");
-					}
-
-					for (BundleEntryComponent entry : searchBundle.getEntry()) {
-						resource = entry.getResource();
-						if (resource instanceof Bundle) {
-							if (entry.getFullUrl().contains(bserReferralFeedbackReference.getId())) {
-								// This is feedback bundle.
-								bserReferralFeedbackDocument = (BSERReferralFeedbackDocument) resource;
-							}
-						}
-					}		
-				}
-
-				if (bserReferralFeedbackDocument == null || bserReferralFeedbackDocument.isEmpty()) {
-					throw new FHIRException("BSeR Referral Task.output exists but referral feedback document does not exist.");
-				}
-
-				// TODO:  parse entries in the bundle.
-			}
-
-			
+			updateResource(bserReferralServiceRequestFromFhirStore);			
 		} else {
-			ThrowFHIRExceptions.unprocessableEntityException(
-					"The bundle must be a MESSAGE type");
+			throw new FHIRException("The bundle must be a MESSAGE type");
 		}
 		
-		MessageHeaderResponseComponent messageHeaderResponse = new MessageHeaderResponseComponent();
-		messageHeaderResponse.setId(messageHeader.getId());
-
-		List<BundleEntryComponent> resultEntries = null;
-		try {
-			// resultEntries = myMapper.createEntries(resources);
-			// TODO: We need to call OMOPonFHIR to create entries here
-			messageHeaderResponse.setCode(ResponseType.OK);
-		} catch (FHIRException e) {
-			e.printStackTrace();
-			messageHeaderResponse.setCode(ResponseType.OK);
-			OperationOutcome outcome = new OperationOutcome();
-			CodeableConcept detailCode = new CodeableConcept();
-			detailCode.setText(e.getMessage());
-			outcome.addIssue().setSeverity(IssueSeverity.ERROR).setDetails(detailCode);
-			messageHeaderResponse.setDetailsTarget(outcome);
-		}
-		
-		messageHeader.setResponse(messageHeaderResponse);
-		BundleEntryComponent responseMessageEntry = new BundleEntryComponent();
-		UUID uuid = UUID.randomUUID();
-		responseMessageEntry.setFullUrl("urn:uuid:"+uuid.toString());
-		responseMessageEntry.setResource(messageHeader);
-		
-		if (resultEntries == null) resultEntries = new ArrayList<BundleEntryComponent>();
-		
-		resultEntries.add(0, responseMessageEntry);
-		retVal.setEntry(resultEntries);
-		
-		return retVal;
+		// This is async messaging. So, we do not return Bundle.
+		return null;
 	}
 }
