@@ -1068,7 +1068,7 @@ public class ServerOperations {
 			sourceOrganizationReference, 
 			targetOrganizationReference,
 			TaskStatus.REQUESTED, 
-			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "7.0", "Service Request Fulfillment Completed")), 
+			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "2.0", "Service Request Created")), 
 			new Reference(serviceRequest.getIdElement()), 
 			new Date(), 
 			sourceReference, 
