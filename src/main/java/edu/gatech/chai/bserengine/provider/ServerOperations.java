@@ -494,7 +494,7 @@ public class ServerOperations {
 		// Get the initator PractitionerRole resource. This is ServiceRequest.requester.
 		// MDI IG users PractitionerRole. First check the requester if it's practitioner or practitionerRole
 		Reference requesterReference = serviceRequest.getRequester();
-		if (requesterReference == null || requesterReference.isEmpty()) {
+		if (requesterReference.isEmpty()) {
 			sendInternalErrorOO("ServiceRequest.requester", "Requester is NULL");
 		}
 
@@ -685,16 +685,22 @@ public class ServerOperations {
 			// Construct the supporting information bundle for each service type.
 			if (ServiceType.ARTHRITIS.is(theServiceType.getCode())) {
 				supportingInfo = new BSERArthritusReferralSupportingInformation();
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ArthritisReferralSupportingInformation");
 			} else if (ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())) {
 				supportingInfo = new BSERDiabetesPreventionReferralSupportingInformation();
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-DiabetesPreventionReferralSupportingInformation");
 			} else if (ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())) {
 				supportingInfo = new BSEREarlyChildhoodNutritionReferralSupportingInformation();
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-EarlyChildhoodNutritionReferralSupportingInformation");
 			} else if (ServiceType.HYPERTENSION.is(theServiceType.getCode())) {
 				supportingInfo = new BSERHypertensionReferralSupportingInformation();
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-HypertensionReferralSupportingInformation");
 			} else if (ServiceType.OBESITY.is(theServiceType.getCode())) {
 				supportingInfo = new BSERObesityReferralSupportingInformation();
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ObesityReferralSupportingInformation");
 			} else if (ServiceType.TOBACCO_USE_CESSATION.is(theServiceType.getCode())) {
 				supportingInfo = new BSERTobaccoUseCessationReferralSupportingInformation();
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-TobaccoUseCessationReferralSupportingInformation");
 			}
 
 			// Construct allergies in USCore. We are adding as we are constructing the allergy in order to save time and memroy
@@ -1106,6 +1112,8 @@ public class ServerOperations {
 
 		// Referral Request Document Bundle (serviceRequest.supprotingInfo).
 		// The refferral request document bundle includes resources as well. Those are taken care of when this bundle is created above.
+		// Profile is not generated when bundle is set to dataelement. So, set it manually.
+		// bserReferralRequestDocumentBundle.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ReferralRequestDocumentBundle");
 		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(bserReferralRequestDocumentBundle.getIdElement().toVersionless().getValue()).setResource(bserReferralRequestDocumentBundle));
 
 		// Patient resource. This is referenced by almost all resources.
