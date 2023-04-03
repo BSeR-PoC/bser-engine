@@ -62,6 +62,9 @@ import org.hl7.fhir.r4.model.Task.TaskOutputComponent;
 import org.hl7.fhir.r4.model.Task.TaskStatus;
 import org.hl7.fhir.r4.model.codesystems.V3EducationLevel;
 import org.json.JSONObject;
+import org.json.simple.parser.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.context.ContextLoaderListener;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -89,6 +92,7 @@ import ca.uhn.fhir.rest.annotation.Operation;
 import ca.uhn.fhir.rest.annotation.OperationParam;
 import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
+import ca.uhn.fhir.rest.client.api.ServerValidationModeEnum;
 import ca.uhn.fhir.rest.client.interceptor.BearerTokenAuthInterceptor;
 import ca.uhn.fhir.rest.gclient.ICriterion;
 import ca.uhn.fhir.rest.gclient.IQuery;
@@ -120,12 +124,14 @@ import edu.gatech.chai.FHIR.model.BodyHeight;
 import edu.gatech.chai.FHIR.model.BodyWeight;
 import edu.gatech.chai.SmartOnFhirClient.SmartBackendServices;
 import edu.gatech.chai.USCore.model.USCoreAllergyIntolerance;
+import edu.gatech.chai.bserengine.security.RecipientAA;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
 
 public class ServerOperations {
-	private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ServerOperations.class);
+	private static final Logger logger = LoggerFactory.getLogger(ServerOperations.class);
 
 	SmartBackendServices smartBackendServices;
+	RecipientAA recipientAA;
 	String fhirStore = null;
 	String bserEndpointUrl = null;
 
@@ -166,6 +172,7 @@ public class ServerOperations {
 	public ServerOperations() {
 		WebApplicationContext context = ContextLoaderListener.getCurrentWebApplicationContext();
 		smartBackendServices = context.getBean(SmartBackendServices.class);
+		recipientAA = context.getBean(RecipientAA.class);
 
 		fhirStore = System.getenv("FHIRSTORE");
 		bserEndpointUrl = System.getenv("BSERENDPOINTE_URL");
@@ -642,14 +649,14 @@ public class ServerOperations {
 			throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
 		}
 
-		if (!targetEndpointUrl.endsWith("$process-message")) {
-			warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. The $process-message is prepended. ");
-			if (targetEndpointUrl.endsWith("/")) {
-				targetEndpointUrl = targetEndpointUrl.concat("$process-message");
-			} else {
-				targetEndpointUrl = targetEndpointUrl.concat("/$process-message");
-			}
-		}
+		// if (!targetEndpointUrl.endsWith("$process-message")) {
+		// 	warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. The $process-message is prepended. ");
+		// 	if (targetEndpointUrl.endsWith("/")) {
+		// 		targetEndpointUrl = targetEndpointUrl.concat("$process-message");
+		// 	} else {
+		// 		targetEndpointUrl = targetEndpointUrl.concat("/$process-message");
+		// 	}
+		// }
 		
 		// Create BSER recipient PractitionerRole
 		targetPractitionerRole = new BSERReferralRecipientPractitionerRole();
@@ -997,7 +1004,7 @@ public class ServerOperations {
 		}
 
 		Reference supportingInfoReference = new Reference(supportingInfo.getIdElement());
-		System.out.println("Supporting Info Reference: " + supportingInfoReference.getReference());
+		logger.debug("Supporting Info Reference: " + supportingInfoReference.getReference());
 
 		// Referral Request Document Bundle
 		BSERReferralRequestComposition bserReferralRequestComposition= new BSERReferralRequestComposition(
@@ -1098,7 +1105,7 @@ public class ServerOperations {
 
 		// Create Message Bundle. Pass the message header as an argument to add the header in the first entry.
 		BSERReferralMessageBundle messageBundle = new BSERReferralMessageBundle(bserReferralMessageHeader);
-		messageBundle.setId(new IdType(bserEndpointProcessMessageUrl, messageBundle.fhirType(), UUID.randomUUID().toString(), null));
+		messageBundle.setId(new IdType(bserEndpointUrl, messageBundle.fhirType(), UUID.randomUUID().toString(), null));
 
 		// Now add all the referenced resources at this message bundle level. These are (except message header),
 		// task and service request (task.focuse = service request). Service Request also has references. They will all
@@ -1173,25 +1180,52 @@ public class ServerOperations {
 
 		// Submit to target $process-message operation
 		FhirContext ctx = StaticValues.myFhirContext; 
-		// IParser parser = ctx.newJsonParser();
-		// String messageBundleJson = parser.encodeResourceToString(messageBundle);
-		// logger.info("SENDING TO " + targetEndpointUrl + ":\n" + messageBundleJson);
+		ctx.getRestfulClientFactory().setServerValidationMode(ServerValidationModeEnum.NEVER);
 
 		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
 			IGenericClient client;
 			if (targetEndpointUrl != null && !targetEndpointUrl.isBlank()) {
-				client = ctx.newRestfulGenericClient(targetEndpointUrl);
-				IBaseResource response = client
-					.operation()
-					.processMessage() // New operation for sending messages
-					.setResponseUrlParam(bserEndpointProcessMessageUrl)
-					.setMessageBundle(messageBundle)
-					.asynchronous(Bundle.class)
-					.execute();
-			
-				if (response instanceof OperationOutcome) {
-					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
+				IParser parser = ctx.newJsonParser();
+				String messageBundleJson = parser.encodeResourceToString(messageBundle);
+				logger.debug("SENDING MessageBundle TO " + targetEndpointUrl + ":\n" + messageBundleJson);
+
+				IBaseResource response = null;
+				if ("YUSA".equals(recipientAA.getRecipientSite())) {
+					// This is YUSA endpoint, which does not have FHIR messaging operation name.
+					String respYusa = recipientAA.submitYusaRR(targetEndpointUrl, messageBundleJson);
+					warningMessage = warningMessage.concat("Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
+				} else {
+					String accessToken = null;
+					try {
+						accessToken = recipientAA.getAccessToken();
+					} catch (ParseException e) {
+						e.printStackTrace();
+					}
+
+					client = ctx.newRestfulGenericClient(targetEndpointUrl);
+					if (accessToken != null && !accessToken.isBlank()) {
+						BearerTokenAuthInterceptor authInterceptor = new BearerTokenAuthInterceptor(accessToken);
+						client.registerInterceptor(authInterceptor);
+					}
+
+					response = client
+						.operation()
+						.processMessage() // New operation for sending messages
+						.setMessageBundle(messageBundle)
+						.asynchronous(Bundle.class)
+						.execute();	
 				}
+
+				if (response != null) {
+					if (!response.isEmpty() && response instanceof OperationOutcome) {
+						throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
+					} else if (!response.isEmpty() && response instanceof Resource){
+						logger.warn("Message has a resource payload: " + response.fhirType());
+					} else {
+						logger.debug("Messaging response is null");
+					}
+				} 
+
 			}
 		} else {
 			warningMessage = warningMessage.concat("Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");

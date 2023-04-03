@@ -6,6 +6,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration
 @EnableScheduling
-@ComponentScan("edu.gatech.chai.SmartOnFhirClient")
+@ComponentScan(basePackages = {"edu.gatech.chai.SmartOnFhirClient", "edu.gatech.chai.bserengine.security"})
 public class FhirServerConfig {
 }
