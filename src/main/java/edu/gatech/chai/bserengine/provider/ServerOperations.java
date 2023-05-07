@@ -36,6 +36,7 @@ import org.hl7.fhir.r4.model.Condition;
 import org.hl7.fhir.r4.model.Coverage;
 import org.hl7.fhir.r4.model.DateTimeType;
 import org.hl7.fhir.r4.model.Endpoint;
+import org.hl7.fhir.r4.model.Enumeration;
 import org.hl7.fhir.r4.model.HealthcareService;
 import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.IdType;
@@ -75,6 +76,7 @@ import org.hl7.fhir.r4.model.Bundle.BundleType;
 import org.hl7.fhir.r4.model.Composition.CompositionStatus;
 import org.hl7.fhir.r4.model.Composition.SectionComponent;
 import org.hl7.fhir.r4.model.Endpoint.EndpointStatus;
+import org.hl7.fhir.r4.model.Endpoint.EndpointStatusEnumFactory;
 import org.hl7.fhir.r4.model.Enumerations.AdministrativeGender;
 import org.hl7.fhir.r4.model.Resource;
 import org.hl7.fhir.r4.model.ServiceRequest;
@@ -82,6 +84,7 @@ import org.hl7.fhir.r4.model.StringType;
 import org.hl7.fhir.r4.model.Task;
 import org.hl7.fhir.r4.model.Type;
 import org.hl7.fhir.r4.model.UriType;
+import org.hl7.fhir.r4.model.UrlType;
 import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.exceptions.FHIRFormatError;
 import org.hl7.fhir.instance.model.api.IBaseBundle;
@@ -273,6 +276,10 @@ public class ServerOperations {
 	}
 
 	private void saveResource (IBaseResource resource) {
+		if (fhirStore == null || fhirStore.isBlank()) {
+			return;
+		}
+
 		IGenericClient genericClient = StaticValues.myFhirContext.newRestfulGenericClient(fhirStore);
 		if (smartBackendServices.setFhirServerUrl(fhirStore).isActive()) {
 			BearerTokenAuthInterceptor authInterceptor = getBearerTokenAuthInterceptor();
@@ -289,6 +296,10 @@ public class ServerOperations {
 	}
 
 	private void updateResource (IBaseResource resource) {
+		if (fhirStore == null || fhirStore.isBlank()) {
+			return;
+		}
+
 		IGenericClient genericClient = StaticValues.myFhirContext.newRestfulGenericClient(fhirStore);
 		if (smartBackendServices.setFhirServerUrl(fhirStore).isActive()) {
 			BearerTokenAuthInterceptor authInterceptor = getBearerTokenAuthInterceptor();
@@ -458,6 +469,11 @@ public class ServerOperations {
 		 *          is not configured, then ServiceRequest.requester will be used to get the FHIR server URL.
 		 */
 
+		boolean recipientReady = false;
+		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
+			recipientReady = true;
+		}
+
 		// ServiceRequest is required.
 		if (theServiceRequest == null) {
 			sendInternalErrorOO("Parameters.parameter.where(name='referral').empty()", "Referral is missing");
@@ -465,7 +481,10 @@ public class ServerOperations {
 
 		// If we received this request, it means we are submitting the referral so it shouldn't be ACTIVE
 		if (theServiceRequest.getStatus() == ServiceRequestStatus.ACTIVE) {
-			warningMessage = warningMessage.concat("The referral request has its status already set to ACTIVE.");
+			if (!warningMessage.isBlank())
+				warningMessage = warningMessage.concat(" The referral request has its status already set to ACTIVE.");
+			else
+				warningMessage = warningMessage.concat("The referral request has its status already set to ACTIVE.");
 		}
 
 		// Get fhirStore Url. This will be the FHIR server that will store BSeR resources
@@ -475,7 +494,11 @@ public class ServerOperations {
 			// set up SMART on FHIR backend service (if possible).
 			smartBackendServices.setFhirServerUrl(fhirStore);
 		} else {
-			sendInternalErrorOO("Parameters.parameter.where(name='bserProviderBaseUrl').empty()", "bserProviderBaseUrl parameter is missing");
+			// sendInternalErrorOO("Parameters.parameter.where(name='bserProviderBaseUrl').empty()", "bserProviderBaseUrl parameter is missing");
+			if (!warningMessage.isBlank())
+				warningMessage = warningMessage.concat(" bserProviderBaseUrl is missing. ");
+			else
+				warningMessage = warningMessage.concat("bserProviderBaseUrl is missing. ");
 		}
 
 		// Create a ServiceRequest as this will be a main resource for UI and BSeR engine.
@@ -505,6 +528,11 @@ public class ServerOperations {
 		} else {
 			thePatient = (Patient) pullResourceFromFhirServer(subjectReference);
 		}
+
+		// Save this patient and rewrite the subject to serviceRequest.
+		saveResource(thePatient);
+		subjectReference = new Reference(thePatient.getIdElement());
+		serviceRequest.setSubject(subjectReference);
 
 		// Get the initator PractitionerRole resource. This is ServiceRequest.requester.
 		// MDI IG users PractitionerRole. First check the requester if it's practitioner or practitionerRole
@@ -575,10 +603,6 @@ public class ServerOperations {
 			sourcePractitionerRole.setId(new IdType(sourcePractitionerRole.fhirType(), UUID.randomUUID().toString()));
 		}
 
-		if (sourceReference == null || sourceReference.isEmpty()) {
-			sourceReference = new Reference(sourcePractitionerRole.getIdElement());
-		}
-
 		// BSeR IG requires Organization for InitiatorPractitionerRole
 		// http://build.fhir.org/ig/HL7/bser/StructureDefinition-BSeR-ReferralInitiatorPractitionerRole.html
 		sourceOrganization = new BSEROrganization(true, "Initiator Organization");
@@ -588,9 +612,11 @@ public class ServerOperations {
 		} else {
 			sourceOrganization.setId(new IdType(sourceOrganization.fhirType(), UUID.randomUUID().toString()));
 
-			saveResource(sourceOrganization);
+			// saveResource(sourceOrganization);
 		}
 
+		saveResource(sourceOrganization);
+		
 		sourceOrganizationReference = new Reference(sourceOrganization.getIdElement());
 		sourcePractitionerRole.setOrganization(sourceOrganizationReference);
 
@@ -611,7 +637,13 @@ public class ServerOperations {
 			sourceEndpoint.setId(new IdType(sourceEndpoint.fhirType(), UUID.randomUUID().toString()));
 			sourcePractitionerRole.addEndpoint(new Reference(sourceEndpoint.getIdElement()));
 		}
+
+		saveResource(sourcePractitionerRole);
 		
+		if (sourceReference == null || sourceReference.isEmpty()) {
+			sourceReference = new Reference(sourcePractitionerRole.getIdElement());
+		}
+
 		// Get target (or recipient) practitioner resource. include practitioner, organization, endpoint, and healthService resources.
 		targetReference = serviceRequest.getPerformerFirstRep();
 		searchBundle = searchResourceFromFhirServer(
@@ -641,19 +673,50 @@ public class ServerOperations {
 			sendInternalErrorOO("ServiceRequest.performer", "The ServiceRequest.performer: " + targetReference.getReference() + " does not seem to exist.");
 		}
 
+		targetOrganization = new BSEROrganization(true, "Rexcipient Organzation");
 		if (targetEhrOrganization == null || targetEhrOrganization.isEmpty()) {
-			targetOrganization = null;
-		} else {
-			targetOrganization = new BSEROrganization(true, "Recipient Organzation");
+			// We were not able to resolve the targetOrganization from EHR. 
+			// Construct one as best as you can
+			// See if we can get some information from targetEhrPractitionerRole.
+			// If we had a reference, we should've been able to get it from include. 
+			// See if we have identifer ane/or display
+			Reference targetOrgReferenceIn = targetEhrPractitionerRole.getOrganization();
 			targetOrganization.addType(new CodeableConcept(new Coding("http://terminology.hl7.org/CodeSystem/organization-type", "bus", "Non-Healthcare Business or Corporation")));
+			if (targetOrgReferenceIn != null && !targetOrgReferenceIn.isEmpty()) {
+				Identifier targetOrgId = targetOrgReferenceIn.getIdentifier();
+				if (targetOrgId != null && !targetOrgId.isEmpty()) {
+					targetOrganization.addIdentifier(targetOrgId);
+				}
+
+				String targetOrgDisp = targetOrgReferenceIn.getDisplay();
+				if (targetOrgDisp != null && !targetOrgDisp.isEmpty()) {
+					targetOrganization.setName(targetOrgDisp);
+				}
+			}
+			targetOrganization.setId(new IdType(targetOrganization.fhirType(), UUID.randomUUID().toString()));
+		} else {
 			targetEhrOrganization.copyValues(targetOrganization);
 		}
 
 		// Find the endpoint for thie target.
-		if (targetEndpoint != null && !targetEndpoint.isEmpty() && targetEndpoint.getAddress() != null && !targetEndpoint.getAddress().isEmpty()) {
+		if (recipientReady && targetEndpoint != null && !targetEndpoint.isEmpty() && targetEndpoint.getAddress() != null && !targetEndpoint.getAddress().isEmpty()) {
 			targetEndpointUrl = targetEndpoint.getAddress();
 		} else {
-			throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
+			if (!warningMessage.isBlank()) {
+				warningMessage = warningMessage.concat(" Recipient is not ready or target Endpoing is not available");
+			} else {
+				warningMessage = warningMessage.concat("Recipient is not ready or target Endpoing is not available");
+			}
+			targetEndpointUrl = "http://recipient.notready.or.test/";
+			targetEndpoint = new Endpoint(
+				new Enumeration<EndpointStatus>(new EndpointStatusEnumFactory(), EndpointStatus.TEST), 
+				new Coding("http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "hl7-fhir-msg", ""), 
+				new UrlType(targetEndpointUrl));
+
+			targetEndpoint.addPayloadType(new CodeableConcept().setText("BSeR Referral Request Message"));
+			targetEndpoint.setId(new IdType(targetEndpoint.fhirType(), UUID.randomUUID().toString()));
+			targetEhrPractitionerRole.addEndpoint(new Reference(targetEndpoint.getIdElement()));
+			// throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
 		}
 
 		// if (!targetEndpointUrl.endsWith("$process-message")) {
@@ -1218,6 +1281,7 @@ public class ServerOperations {
 			TaskStatus.REQUESTED, 
 			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "2.0", "Service Request Created")), 
 			new Reference(serviceRequest.getIdElement()), 
+			subjectReference,
 			new Date(), 
 			sourceReference, 
 			targetReference);
@@ -1225,8 +1289,11 @@ public class ServerOperations {
 		bserReferralTask.setIntent(TaskIntent.ORDER);
 
 		// create Task resource in the fhirStore. id will be assigned.
-		// bserReferralTask.setId(new IdType(bserReferralTask.fhirType(), UUID.randomUUID().toString()));
 		saveResource(bserReferralTask);
+		if (bserReferralTask.getIdElement().isEmpty()) {
+			// we may not able to save this. assign one.
+			bserReferralTask.setId(new IdType(bserReferralTask.fhirType(), UUID.randomUUID().toString()));
+		}
 
 		// BSeR Referral Message Header focus Task
 		BSERReferralMessageHeader bserReferralMessageHeader = new BSERReferralMessageHeader(targetReference, sourceReference, 
@@ -1317,7 +1384,7 @@ public class ServerOperations {
 		FhirContext ctx = StaticValues.myFhirContext; 
 		ctx.getRestfulClientFactory().setServerValidationMode(ServerValidationModeEnum.NEVER);
 
-		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
+		if (recipientReady) {
 			IGenericClient client;
 			if (targetEndpointUrl != null && !targetEndpointUrl.isBlank()) {
 				IParser parser = ctx.newJsonParser();
@@ -1328,7 +1395,10 @@ public class ServerOperations {
 				if ("YUSA".equals(recipientAA.getRecipientSite())) {
 					// This is YUSA endpoint, which does not have FHIR messaging operation name.
 					String respYusa = recipientAA.submitYusaRR(targetEndpointUrl, messageBundleJson);
-					warningMessage = warningMessage.concat("Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
+					if (!warningMessage.isBlank())
+						warningMessage = warningMessage.concat(" Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
+					else
+						warningMessage = warningMessage.concat("Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
 				} else {
 					String accessToken = null;
 					try {
@@ -1363,7 +1433,10 @@ public class ServerOperations {
 
 			}
 		} else {
-			warningMessage = warningMessage.concat("Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
+			if (!warningMessage.isBlank())
+				warningMessage = warningMessage.concat(" Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
+			else
+				warningMessage = warningMessage.concat("Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
 		}
 
 		// Save Message before submission.
@@ -1371,7 +1444,8 @@ public class ServerOperations {
 				
 		// return anything if needed in Parameters
 		Parameters returnParameters = new Parameters();
-		returnParameters.addParameter("referral_request", new Reference(messageBundle.getIdElement()));
+		returnParameters.addParameter("referral_request_reference", new Reference(messageBundle.getIdElement()));
+		returnParameters.addParameter().setName("referral_request_resource").setResource(messageBundle);
 		ParametersParameterComponent recipientParam = new ParametersParameterComponent(new StringType("recipient_endpoint"));
 		recipientParam.setResource(targetEndpoint);
 		returnParameters.addParameter(recipientParam);
