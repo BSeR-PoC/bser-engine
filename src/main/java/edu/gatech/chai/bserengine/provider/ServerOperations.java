@@ -1485,12 +1485,12 @@ public class ServerOperations {
 		@OperationParam(name="response-url") UriType theUri			
 	) {
 		// Feedback would also be async as there can be another message.
-		if (theAsync == null) {
-			throw new FHIRException("async parameter must exist");
-		}
-		if (!theAsync.booleanValue()) {
-			throw new FHIRException("BSERReferralFeedback Messageing must have async set to true.");
-		}
+		// if (theAsync == null) {
+		// 	throw new FHIRException("async parameter must exist");
+		// }
+		// if (!theAsync.booleanValue()) {
+		// 	throw new FHIRException("BSERReferralFeedback Messageing must have async set to true.");
+		// }
 
 		// String recipientEndpointUrl;
 		// if (theUri != null && !theUri.isEmpty()) {
