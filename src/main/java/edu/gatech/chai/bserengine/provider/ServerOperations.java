@@ -20,6 +20,7 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -35,10 +36,12 @@ import org.hl7.fhir.r4.model.Condition;
 import org.hl7.fhir.r4.model.Coverage;
 import org.hl7.fhir.r4.model.DateTimeType;
 import org.hl7.fhir.r4.model.Endpoint;
+import org.hl7.fhir.r4.model.Enumeration;
 import org.hl7.fhir.r4.model.HealthcareService;
 import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.IdType;
 import org.hl7.fhir.r4.model.Identifier;
+import org.hl7.fhir.r4.model.MedicationStatement;
 import org.hl7.fhir.r4.model.MessageHeader;
 import org.hl7.fhir.r4.model.Meta;
 import org.hl7.fhir.r4.model.Observation;
@@ -71,7 +74,9 @@ import org.springframework.web.context.WebApplicationContext;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.r4.model.Bundle.BundleType;
 import org.hl7.fhir.r4.model.Composition.CompositionStatus;
+import org.hl7.fhir.r4.model.Composition.SectionComponent;
 import org.hl7.fhir.r4.model.Endpoint.EndpointStatus;
+import org.hl7.fhir.r4.model.Endpoint.EndpointStatusEnumFactory;
 import org.hl7.fhir.r4.model.Enumerations.AdministrativeGender;
 import org.hl7.fhir.r4.model.Resource;
 import org.hl7.fhir.r4.model.ServiceRequest;
@@ -79,6 +84,7 @@ import org.hl7.fhir.r4.model.StringType;
 import org.hl7.fhir.r4.model.Task;
 import org.hl7.fhir.r4.model.Type;
 import org.hl7.fhir.r4.model.UriType;
+import org.hl7.fhir.r4.model.UrlType;
 import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.exceptions.FHIRFormatError;
 import org.hl7.fhir.instance.model.api.IBaseBundle;
@@ -97,15 +103,12 @@ import ca.uhn.fhir.rest.client.interceptor.BearerTokenAuthInterceptor;
 import ca.uhn.fhir.rest.gclient.ICriterion;
 import ca.uhn.fhir.rest.gclient.IQuery;
 import ca.uhn.fhir.rest.server.exceptions.InternalErrorException;
-import edu.gatech.chai.BSER.model.BSERArthritusReferralSupportingInformation;
 import edu.gatech.chai.BSER.model.BSERCoverage;
-import edu.gatech.chai.BSER.model.BSERDiabetesPreventionReferralSupportingInformation;
 import edu.gatech.chai.BSER.model.BSERDiagnosis;
-import edu.gatech.chai.BSER.model.BSEREarlyChildhoodNutritionReferralSupportingInformation;
 import edu.gatech.chai.BSER.model.BSEREducationLevel;
 import edu.gatech.chai.BSER.model.BSERHA1CObservation;
-import edu.gatech.chai.BSER.model.BSERHypertensionReferralSupportingInformation;
-import edu.gatech.chai.BSER.model.BSERObesityReferralSupportingInformation;
+import edu.gatech.chai.BSER.model.BSERMedicationStatement;
+import edu.gatech.chai.BSER.model.BSERNRTAuthorizationStatus;
 import edu.gatech.chai.BSER.model.BSEROrganization;
 import edu.gatech.chai.BSER.model.BSERReferralFeedbackDocument;
 import edu.gatech.chai.BSER.model.BSERReferralInitiatorPractitionerRole;
@@ -116,13 +119,19 @@ import edu.gatech.chai.BSER.model.BSERReferralRequestComposition;
 import edu.gatech.chai.BSER.model.BSERReferralRequestDocumentBundle;
 import edu.gatech.chai.BSER.model.BSERReferralServiceRequest;
 import edu.gatech.chai.BSER.model.BSERReferralTask;
-import edu.gatech.chai.BSER.model.BSERTobaccoUseCessationReferralSupportingInformation;
+import edu.gatech.chai.BSER.model.BSERTelcomCommunicationPreferences;
+import edu.gatech.chai.BSER.model.BSEREarlyChildhoodNutritionObservation;
 import edu.gatech.chai.BSER.model.ODHEmploymentStatus;
-import edu.gatech.chai.FHIR.model.BMI;
-import edu.gatech.chai.FHIR.model.BloodPressure;
-import edu.gatech.chai.FHIR.model.BodyHeight;
-import edu.gatech.chai.FHIR.model.BodyWeight;
+import edu.gatech.chai.BSER.model.util.BSEREarlyChildhoodNutritionObservationUtil;
+import edu.gatech.chai.BSER.model.util.BSERNRTAuthorizationStatusUtil;
+import edu.gatech.chai.BSER.model.util.BSeRTelcomCommunicationPreferencesUtil;
 import edu.gatech.chai.SmartOnFhirClient.SmartBackendServices;
+import edu.gatech.chai.USCore.model.USCoreBloodPressure;
+import edu.gatech.chai.USCore.model.USCoreBodyHeight;
+import edu.gatech.chai.USCore.model.USCoreBMI;
+import edu.gatech.chai.USCore.model.USCoreBodyWeight;
+import edu.gatech.chai.USCore.model.USCoreSmokingStatusObservation;
+import edu.gatech.chai.USCore.model.util.USCoreSmokingStatusObservationUtil;
 import edu.gatech.chai.USCore.model.USCoreAllergyIntolerance;
 import edu.gatech.chai.bserengine.security.RecipientAA;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
@@ -267,6 +276,10 @@ public class ServerOperations {
 	}
 
 	private void saveResource (IBaseResource resource) {
+		if (fhirStore == null || fhirStore.isBlank()) {
+			return;
+		}
+
 		IGenericClient genericClient = StaticValues.myFhirContext.newRestfulGenericClient(fhirStore);
 		if (smartBackendServices.setFhirServerUrl(fhirStore).isActive()) {
 			BearerTokenAuthInterceptor authInterceptor = getBearerTokenAuthInterceptor();
@@ -283,6 +296,10 @@ public class ServerOperations {
 	}
 
 	private void updateResource (IBaseResource resource) {
+		if (fhirStore == null || fhirStore.isBlank()) {
+			return;
+		}
+
 		IGenericClient genericClient = StaticValues.myFhirContext.newRestfulGenericClient(fhirStore);
 		if (smartBackendServices.setFhirServerUrl(fhirStore).isActive()) {
 			BearerTokenAuthInterceptor authInterceptor = getBearerTokenAuthInterceptor();
@@ -452,6 +469,11 @@ public class ServerOperations {
 		 *          is not configured, then ServiceRequest.requester will be used to get the FHIR server URL.
 		 */
 
+		boolean recipientReady = false;
+		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
+			recipientReady = true;
+		}
+
 		// ServiceRequest is required.
 		if (theServiceRequest == null) {
 			sendInternalErrorOO("Parameters.parameter.where(name='referral').empty()", "Referral is missing");
@@ -459,28 +481,36 @@ public class ServerOperations {
 
 		// If we received this request, it means we are submitting the referral so it shouldn't be ACTIVE
 		if (theServiceRequest.getStatus() == ServiceRequestStatus.ACTIVE) {
-			warningMessage = warningMessage.concat("The referral request has its status already set to ACTIVE. ");
+			if (!warningMessage.isBlank())
+				warningMessage = warningMessage.concat(" The referral request has its status already set to ACTIVE.");
+			else
+				warningMessage = warningMessage.concat("The referral request has its status already set to ACTIVE.");
 		}
 
-		// Create a task and add ServiceRequest to task.focus
-		// We may not have the complete service request. This is from UI. Create Service Request and copy current ones to
-		// newly created service request. 
-		BSERReferralServiceRequest serviceRequest = new BSERReferralServiceRequest();
-		theServiceRequest.copyValues(serviceRequest);
-		serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
-
-		if (serviceRequest.getIdElement() == null || serviceRequest.getIdElement().isEmpty()) {
-			sendInternalErrorOO("ServiceRequest.id", "ServiceRequest does not have id");
-		}
-
-		// Get fhirStore Url.
+		// Get fhirStore Url. This will be the FHIR server that will store BSeR resources
 		if (theBserProviderBaseUrl != null) {
 			fhirStore = theBserProviderBaseUrl.getValue();
 
 			// set up SMART on FHIR backend service (if possible).
 			smartBackendServices.setFhirServerUrl(fhirStore);
 		} else {
-			sendInternalErrorOO("Parameters.parameter.where(name='bserProviderBaseUrl').empty()", "bserProviderBaseUrl parameter is missing");
+			// sendInternalErrorOO("Parameters.parameter.where(name='bserProviderBaseUrl').empty()", "bserProviderBaseUrl parameter is missing");
+			if (!warningMessage.isBlank())
+				warningMessage = warningMessage.concat(" bserProviderBaseUrl is missing. ");
+			else
+				warningMessage = warningMessage.concat("bserProviderBaseUrl is missing. ");
+		}
+
+		// Create a ServiceRequest as this will be a main resource for UI and BSeR engine.
+		// We may not have the complete service request as it is from UI. Create Service Request and copy current ones to
+		// newly created service request. 
+		BSERReferralServiceRequest serviceRequest = new BSERReferralServiceRequest();
+		theServiceRequest.copyValues(serviceRequest);
+		serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
+
+		// Check if the serviceRequest has a proper ID.
+		if (serviceRequest.getIdElement() == null || serviceRequest.getIdElement().isEmpty()) {
+			sendInternalErrorOO("ServiceRequest.id", "ServiceRequest does not have id");
 		}
 
 		// Sanity check on the ServiceRequest.subject is patient, and it matches with the received Patient resource.
@@ -489,6 +519,7 @@ public class ServerOperations {
 			sendInternalErrorOO("ServiceRequest.subject", "Subject must be Patient");
 		}
 
+		// Check thePatient parameter
 		if (thePatient != null) {
 			// Check if the included patient resource matches with the one in the serviceRequest. 
 			if (!subjectReference.getReferenceElement().getIdPart().equals(thePatient.getIdElement().getIdPart())) {
@@ -497,6 +528,12 @@ public class ServerOperations {
 		} else {
 			thePatient = (Patient) pullResourceFromFhirServer(subjectReference);
 		}
+
+		// Save this patient and rewrite the subject to serviceRequest.
+		saveResource(thePatient);
+		String subjectName = thePatient.getNameFirstRep().getGivenAsSingleString() + " " + thePatient.getNameFirstRep().getFamily();
+		subjectReference = new Reference(thePatient.getIdElement()).setDisplay(subjectName);
+		serviceRequest.setSubject(subjectReference);
 
 		// Get the initator PractitionerRole resource. This is ServiceRequest.requester.
 		// MDI IG users PractitionerRole. First check the requester if it's practitioner or practitionerRole
@@ -567,10 +604,6 @@ public class ServerOperations {
 			sourcePractitionerRole.setId(new IdType(sourcePractitionerRole.fhirType(), UUID.randomUUID().toString()));
 		}
 
-		if (sourceReference == null || sourceReference.isEmpty()) {
-			sourceReference = new Reference(sourcePractitionerRole.getIdElement());
-		}
-
 		// BSeR IG requires Organization for InitiatorPractitionerRole
 		// http://build.fhir.org/ig/HL7/bser/StructureDefinition-BSeR-ReferralInitiatorPractitionerRole.html
 		sourceOrganization = new BSEROrganization(true, "Initiator Organization");
@@ -580,9 +613,11 @@ public class ServerOperations {
 		} else {
 			sourceOrganization.setId(new IdType(sourceOrganization.fhirType(), UUID.randomUUID().toString()));
 
-			saveResource(sourceOrganization);
+			// saveResource(sourceOrganization);
 		}
 
+		saveResource(sourceOrganization);
+		
 		sourceOrganizationReference = new Reference(sourceOrganization.getIdElement());
 		sourcePractitionerRole.setOrganization(sourceOrganizationReference);
 
@@ -603,7 +638,13 @@ public class ServerOperations {
 			sourceEndpoint.setId(new IdType(sourceEndpoint.fhirType(), UUID.randomUUID().toString()));
 			sourcePractitionerRole.addEndpoint(new Reference(sourceEndpoint.getIdElement()));
 		}
+
+		saveResource(sourcePractitionerRole);
 		
+		if (sourceReference == null || sourceReference.isEmpty()) {
+			sourceReference = new Reference(sourcePractitionerRole.getIdElement());
+		}
+
 		// Get target (or recipient) practitioner resource. include practitioner, organization, endpoint, and healthService resources.
 		targetReference = serviceRequest.getPerformerFirstRep();
 		searchBundle = searchResourceFromFhirServer(
@@ -633,20 +674,50 @@ public class ServerOperations {
 			sendInternalErrorOO("ServiceRequest.performer", "The ServiceRequest.performer: " + targetReference.getReference() + " does not seem to exist.");
 		}
 
+		targetOrganization = new BSEROrganization(true, "Rexcipient Organzation");
 		if (targetEhrOrganization == null || targetEhrOrganization.isEmpty()) {
-			targetOrganization = null;
-		} else {
-			targetOrganization = new BSEROrganization(true, "Recipient Organzation");
+			// We were not able to resolve the targetOrganization from EHR. 
+			// Construct one as best as you can
+			// See if we can get some information from targetEhrPractitionerRole.
+			// If we had a reference, we should've been able to get it from include. 
+			// See if we have identifer ane/or display
+			Reference targetOrgReferenceIn = targetEhrPractitionerRole.getOrganization();
 			targetOrganization.addType(new CodeableConcept(new Coding("http://terminology.hl7.org/CodeSystem/organization-type", "bus", "Non-Healthcare Business or Corporation")));
+			if (targetOrgReferenceIn != null && !targetOrgReferenceIn.isEmpty()) {
+				Identifier targetOrgId = targetOrgReferenceIn.getIdentifier();
+				if (targetOrgId != null && !targetOrgId.isEmpty()) {
+					targetOrganization.addIdentifier(targetOrgId);
+				}
+
+				String targetOrgDisp = targetOrgReferenceIn.getDisplay();
+				if (targetOrgDisp != null && !targetOrgDisp.isEmpty()) {
+					targetOrganization.setName(targetOrgDisp);
+				}
+			}
+			targetOrganization.setId(new IdType(targetOrganization.fhirType(), UUID.randomUUID().toString()));
+		} else {
 			targetEhrOrganization.copyValues(targetOrganization);
 		}
 
-		// Send message bundle to target
-		// First, find the endpoint for thie target.
-		if (targetEndpoint != null && !targetEndpoint.isEmpty() && targetEndpoint.getAddress() != null && !targetEndpoint.getAddress().isEmpty()) {
+		// Find the endpoint for thie target.
+		if (recipientReady && targetEndpoint != null && !targetEndpoint.isEmpty() && targetEndpoint.getAddress() != null && !targetEndpoint.getAddress().isEmpty()) {
 			targetEndpointUrl = targetEndpoint.getAddress();
 		} else {
-			throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
+			if (!warningMessage.isBlank()) {
+				warningMessage = warningMessage.concat(" Recipient is not ready or target Endpoing is not available");
+			} else {
+				warningMessage = warningMessage.concat("Recipient is not ready or target Endpoing is not available");
+			}
+			targetEndpointUrl = "http://recipient.notready.or.test/";
+			targetEndpoint = new Endpoint(
+				new Enumeration<EndpointStatus>(new EndpointStatusEnumFactory(), EndpointStatus.TEST), 
+				new Coding("http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "hl7-fhir-msg", ""), 
+				new UrlType(targetEndpointUrl));
+
+			targetEndpoint.addPayloadType(new CodeableConcept().setText("BSeR Referral Request Message"));
+			targetEndpoint.setId(new IdType(targetEndpoint.fhirType(), UUID.randomUUID().toString()));
+			targetEhrPractitionerRole.addEndpoint(new Reference(targetEndpoint.getIdElement()));
+			// throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
 		}
 
 		// if (!targetEndpointUrl.endsWith("$process-message")) {
@@ -687,324 +758,443 @@ public class ServerOperations {
 			saveResource(odhEmploymentStatus);
 		}
 
-		IBaseBundle supportingInfo = null;
-		if (theServiceType != null) {
-			// Construct the supporting information bundle for each service type.
-			if (ServiceType.ARTHRITIS.is(theServiceType.getCode())) {
-				supportingInfo = new BSERArthritusReferralSupportingInformation();
-				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ArthritisReferralSupportingInformation");
-			} else if (ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())) {
-				supportingInfo = new BSERDiabetesPreventionReferralSupportingInformation();
-				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-DiabetesPreventionReferralSupportingInformation");
-			} else if (ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())) {
-				supportingInfo = new BSEREarlyChildhoodNutritionReferralSupportingInformation();
-				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-EarlyChildhoodNutritionReferralSupportingInformation");
-			} else if (ServiceType.HYPERTENSION.is(theServiceType.getCode())) {
-				supportingInfo = new BSERHypertensionReferralSupportingInformation();
-				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-HypertensionReferralSupportingInformation");
-			} else if (ServiceType.OBESITY.is(theServiceType.getCode())) {
-				supportingInfo = new BSERObesityReferralSupportingInformation();
-				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ObesityReferralSupportingInformation");
-			} else if (ServiceType.TOBACCO_USE_CESSATION.is(theServiceType.getCode())) {
-				supportingInfo = new BSERTobaccoUseCessationReferralSupportingInformation();
-				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-TobaccoUseCessationReferralSupportingInformation");
+		// Now, we should be ready to Referral Request Document Bundle.
+		// Create supporting info resources, which their references will be placed in the composition.section
+
+		List<Resource> supportingInfoResources = new ArrayList<Resource>();
+		List<Reference> allergyReferences = new ArrayList<Reference>();
+		if (theAllergies != null && !theAllergies.isEmpty()) {
+			for (BundleEntryComponent allergy : theAllergies.getEntry()) {
+				USCoreAllergyIntolerance usCoreAllergyIntolerance = new USCoreAllergyIntolerance();
+				AllergyIntolerance allergyIntolerance = (AllergyIntolerance) allergy.getResource();
+				allergyIntolerance.copyValues(usCoreAllergyIntolerance);
+				// Sanity check on allergy received for the patient reference. If the allergy has no baseUrl, we only check resource type and id.
+				if (!isEqualReference(subjectReference, usCoreAllergyIntolerance.getPatient(), subjectReference.getReferenceElement().getBaseUrl())) {
+					sendInternalErrorOO("AllergyIntolerance.patient", "the Patient reference does not match with ServiceRequest.subject");
+				}
+
+				// Add Allergy to the list
+				supportingInfoResources.add(usCoreAllergyIntolerance);
+				allergyReferences.add(new Reference(usCoreAllergyIntolerance.getIdElement()));
+
+				saveResource(usCoreAllergyIntolerance);
 			}
+		}
 
-			// Construct allergies in USCore. We are adding as we are constructing the allergy in order to save time and memroy
-			if (theAllergies != null) {
-				if (ServiceType.ARTHRITIS.is(theServiceType.getCode()) || ServiceType.OBESITY.is(theServiceType.getCode()) ) {
-					for (BundleEntryComponent allergy : theAllergies.getEntry()) {
-						USCoreAllergyIntolerance usCoreAllergyIntolerance = new USCoreAllergyIntolerance();
-						AllergyIntolerance allergyIntolerance = (AllergyIntolerance) allergy.getResource();
-						allergyIntolerance.copyValues(usCoreAllergyIntolerance);
-						// Sanity check on allergy received for the patient reference. If the allergy has no baseUrl, we only check resource type and id.
-						if (!isEqualReference(subjectReference, usCoreAllergyIntolerance.getPatient(), subjectReference.getReferenceElement().getBaseUrl())) {
-							sendInternalErrorOO("AllergyIntolerance.patient", "the Patient reference does not match with ServiceRequest.subject");
-						}
+		List<Reference> medicationReferences = new ArrayList<Reference>();
+		if (theMedications != null && !theMedications.isEmpty()) {
+			for (BundleEntryComponent med :  theMedications.getEntry()) {
+				BSERMedicationStatement bserMedicationStatement = new BSERMedicationStatement();
+				MedicationStatement medicationStatement = (MedicationStatement) med.getResource();
+				medicationStatement.copyValues(bserMedicationStatement);
+				// Sanity check on allergy received for the patient reference. If the allergy has no baseUrl, we only check resource type and id.
+				if (!isEqualReference(subjectReference, bserMedicationStatement.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
+					sendInternalErrorOO("AllergyIntolerance.patient", "the Patient reference does not match with ServiceRequest.subject");
+				}
 
-						// Add Allergy
-						((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(usCoreAllergyIntolerance.getIdElement().toVersionless().getValue()).setResource(usCoreAllergyIntolerance));
+				// Add Allergy to the list
+				supportingInfoResources.add(bserMedicationStatement);
+				medicationReferences.add(new Reference(bserMedicationStatement.getIdElement()));
+
+				saveResource(bserMedicationStatement);
+			}
+		}
+
+		Reference bpReference = null;
+		if (theBloodPressure != null && !theBloodPressure.isEmpty()) {
+			USCoreBloodPressure bpObservation = new USCoreBloodPressure();
+			boolean referenced = false;
+			for (ParametersParameterComponent bpParam : theBloodPressure.getPart()) {
+				if ("reference".equals(bpParam.getName())) {
+					// This is reference to the BP observation. Pull this resource
+					// from EHR
+					bpObservation = (USCoreBloodPressure) pullResourceFromFhirServer((Reference)bpParam.getValue());
+					if (!isEqualReference(subjectReference, bpObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
+						sendInternalErrorOO("bloodPressure.subject", "the Subject reference does not match with ServiceRequest.subject");
+					}
+					referenced = true;
+					break;
+				} else { 
+					if ("date".equals(bpParam.getName())) {
+						bpObservation.setEffective((DateTimeType)bpParam.getValue());
+					} else if ("diastolic".equals(bpParam.getName())) {
+						bpObservation.setDiastolic((Quantity) bpParam.getValue());
+					} else if ("systolic".equals(bpParam.getName())) {
+						bpObservation.setSystolic((Quantity) bpParam.getValue());
 					}
 				}
 			}
 
-			BloodPressure bloodPressureObservation = new BloodPressure();
-			if (theBloodPressure != null) {
-				boolean referenced = false;
-				for (ParametersParameterComponent bpParam : theBloodPressure.getPart()) {
-					if ("reference".equals(bpParam.getName())) {
-						// This is reference to the BP observation. Pull this resource
-						// from EHR
-						bloodPressureObservation = (BloodPressure) pullResourceFromFhirServer((Reference)bpParam.getValue());
-						if (!isEqualReference(subjectReference, bloodPressureObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
-							sendInternalErrorOO("bloodPressure.subject", "the Subject reference does not match with ServiceRequest.subject");
-						}
-						referenced = true;
-						break;
-					} else { 
-						if ("date".equals(bpParam.getName())) {
-							bloodPressureObservation.setEffective((DateTimeType)bpParam.getValue());
-						} else if ("diastolic".equals(bpParam.getName())) {
-							bloodPressureObservation.setDiastolic((Quantity) bpParam.getValue());
-						} else if ("systolic".equals(bpParam.getName())) {
-							bloodPressureObservation.setSystolic((Quantity) bpParam.getValue());
-						}
-					}
-				}
+			if (!referenced) {
+				bpObservation.setSubject(subjectReference);
+				bpObservation.setStatus(ObservationStatus.FINAL);
 
-				if (!referenced) {
-					bloodPressureObservation.setSubject(subjectReference);
-					bloodPressureObservation.setStatus(ObservationStatus.FINAL);
-
-					// write to fhirStore.
-					saveResource(bloodPressureObservation);
-				}
+				// write to fhirStore.
+				saveResource(bpObservation);
 			}
+			supportingInfoResources.add(bpObservation);
+			bpReference = new Reference(bpObservation.getIdElement());
+		}
 
-			// Observation Body Height Profile (http://hl7.org/fhir/StructureDefinition/bodyheight)
-			BodyHeight bodyHeightObservation = null;
-			if (theBodyHeight != null) {
-				Type theBodyHeightValue = theBodyHeight.getValue();
-				if (theBodyHeightValue instanceof Reference) {
-					StringType referenceString = (StringType) theBodyHeightValue;	
-					Observation bodyHeightEhrObservation = (Observation) pullResourceFromFhirServer(new Reference(referenceString.asStringValue()));
-					if (!isEqualReference(subjectReference, bodyHeightEhrObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
-						sendInternalErrorOO("bodyHeight.subject", "the Subject reference does not match with ServiceRequest.subject");
-					}
-
-					bodyHeightObservation = new BodyHeight();
-					bodyHeightEhrObservation.copyValues(bodyHeightObservation);
-				} else if (theBodyHeightValue instanceof Quantity) {
-					bodyHeightObservation = new BodyHeight((Quantity) theBodyHeightValue);
-					bodyHeightObservation.setSubject(subjectReference);
-					bodyHeightObservation.setStatus(ObservationStatus.FINAL);
-					
-					// write to fhirStore.
-					saveResource(bodyHeightObservation);
-				} 
-			}
-
-			// Observation Body Weight Profile (http://hl7.org/fhir/StructureDefinition/bodyweight)
-			BodyWeight bodyWeightObservation = null;
-			if (theBodyWeight != null) {
-				Type theBodyWeightValue = theBodyWeight.getValue();
-				if (theBodyWeightValue instanceof Reference) {
-					Observation bodyWeightEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBodyWeightValue);
-					if (!isEqualReference(subjectReference, bodyWeightEhrObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
-						sendInternalErrorOO("bodyWeight.subject", "the Subject reference does not match with ServiceRequest.subject");
-					}
-
-					bodyWeightObservation = new BodyWeight();
-					bodyWeightEhrObservation.copyValues(bodyWeightObservation);
-				} else if (theBodyWeightValue instanceof Quantity) {
-					bodyWeightObservation = new BodyWeight((Quantity) theBodyWeightValue);
-					bodyWeightObservation.setSubject(subjectReference);
-					bodyWeightObservation.setStatus(ObservationStatus.FINAL);
-					
-					// write to fhirStore.
-					saveResource(bodyWeightObservation);
-				}
-			}
-
-			// Observation Body Mass Index Profile (http://hl7.org/fhir/StructureDefinition/bmi)
-			BMI bmiObservation = null;
-			if (theBmi != null) {
-				Type theBmiValue = theBmi.getValue();
-				if (theBmiValue instanceof Reference) {
-					Observation bmiEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBmiValue);
-					if (!isEqualReference(subjectReference, bmiEhrObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
-						sendInternalErrorOO("bmi.subject", "the Subject reference does not match with ServiceRequest.subject");
-					}
-
-					bmiObservation = new BMI();
-					bmiEhrObservation.copyValues(bmiObservation);
-				} else if (theBmiValue instanceof Quantity) {
-					bmiObservation = new BMI((Quantity) theBmiValue);
-					bmiObservation.setSubject(subjectReference);
-					bmiObservation.setStatus(ObservationStatus.FINAL);
-					
-					// write to fhirStore.
-					saveResource(bmiObservation);
-				}
-			}
-			
-			// BSeR HA1C Observation (http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-HA1C-Observation)
-			BSERHA1CObservation ha1cObservation = null;
-			if (theHa1cObservation != null) {
-				Type theHa1cObservationValue = theHa1cObservation.getValue();
-				if (theHa1cObservationValue instanceof Reference) {
-					Reference ha1cObservationReference = (Reference)theHa1cObservationValue;
-					Observation ha1cEhrObservation = (Observation) pullResourceFromFhirServer(ha1cObservationReference);
-					Reference ha1cSubjectReference = ha1cEhrObservation.getSubject();
-					if (!isEqualReference(subjectReference, ha1cSubjectReference, ha1cObservationReference.getReferenceElement().getBaseUrl())) {
-						sendInternalErrorOO("ha1cObservation.subject", "the Subject reference does not match with ServiceRequest.subject");
-					}
-
-					ha1cObservation = new BSERHA1CObservation();
-					ha1cEhrObservation.copyValues(ha1cObservation);
-					ha1cObservation.setStatus(ObservationStatus.FINAL);
-				} else if (theHa1cObservationValue instanceof Quantity) {
-					ha1cObservation = new BSERHA1CObservation(
-						new CodeableConcept(new Coding("http://loinc.org", "4548-4", "Hemoglobin A1c/Hemoglobin.total in Blood")), 
-						(Quantity) theHa1cObservationValue);
-					ha1cObservation.setSubject(subjectReference);
-					ha1cObservation.setStatus(ObservationStatus.FINAL);
-
-					// write to fhirStore.
-					saveResource(ha1cObservation);
-				} else {
-					sendInternalErrorOO("ha1cObservation", "ha1cObservation must be either Referece or Quantity");
-				}
-			}
-
-			// BSeR Diagnosis
-			if (theDiagnosis != null) {
-				for (ParametersParameterComponent diagnosis : theDiagnosis) {
-					BSERDiagnosis diagnosisCondition = new BSERDiagnosis();
-					Type diagnosisValue = diagnosis.getValue();
-					if (diagnosisValue instanceof Reference) {
-						if (diagnosisValue.getIdElement() != null) {
-							Condition respCondition = (Condition) pullResourceFromFhirServer((Reference) diagnosisValue);
-							if (!isEqualReference(subjectReference, respCondition.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
-								sendInternalErrorOO("diagnosis.subject", "the Subject reference does not match with ServiceRequest.subject");
-							}
-			
-							respCondition.copyValues(diagnosisCondition);
-						}
-					} else if (diagnosisValue instanceof Coding) {
-						diagnosisCondition.setCode(new CodeableConcept((Coding) diagnosisValue));
-						diagnosisCondition.setSubject(subjectReference);
-						
-						// write to fhirStore.
-						saveResource(ha1cObservation);
-					}
-
-					if (ServiceType.HYPERTENSION.is(theServiceType.getCode()) 
-						&& diagnosisCondition != null && !diagnosisCondition.isEmpty()) {
-						((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(diagnosisCondition.getIdElement().toVersionless().getValue()).setResource(diagnosisCondition));
-					}		
-				}
-			}
-
-			// Add Blood Pressure.
-			if (ServiceType.ARTHRITIS.is(theServiceType.getCode())
-				|| ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())
-				|| ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())
-				|| ServiceType.HYPERTENSION.is(theServiceType.getCode())
-				|| ServiceType.OBESITY.is(theServiceType.getCode()) ) {
-
-				if (bloodPressureObservation != null && !bloodPressureObservation.isEmpty()) {
-					((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(bloodPressureObservation.getIdElement().toVersionless().getValue()).setResource(bloodPressureObservation));
-				}
-			}
-
-			// Add Body Height and Weight
-			if (ServiceType.ARTHRITIS.is(theServiceType.getCode())
-				|| ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())
-				|| ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())
-				|| ServiceType.HYPERTENSION.is(theServiceType.getCode())
-				|| ServiceType.OBESITY.is(theServiceType.getCode()) ) {
-
-				if (bodyHeightObservation != null && !bodyHeightObservation.isEmpty()) {
-					((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(bodyHeightObservation.getIdElement().toVersionless().getValue()).setResource(bodyHeightObservation));	
+		Reference bodyHeightReference = null;
+		if (theBodyHeight != null) {
+			USCoreBodyHeight bodyHeightObservation = null;
+			Type theBodyHeightValue = theBodyHeight.getValue();
+			if (theBodyHeightValue instanceof Reference) {
+				StringType referenceString = (StringType) theBodyHeightValue;	
+				Observation bodyHeightEhrObservation = (Observation) pullResourceFromFhirServer(new Reference(referenceString.asStringValue()));
+				if (!isEqualReference(subjectReference, bodyHeightEhrObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
+					sendInternalErrorOO("bodyHeight.subject", "the Subject reference does not match with ServiceRequest.subject");
 				}
 
-				if (bodyWeightObservation != null && !bodyWeightObservation.isEmpty()) {
-					((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(bodyWeightObservation.getIdElement().toVersionless().getValue()).setResource(bodyWeightObservation));
-				}
-			}
-
-			// Add BMI
-			if (ServiceType.ARTHRITIS.is(theServiceType.getCode())
-				|| ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())
-				|| ServiceType.HYPERTENSION.is(theServiceType.getCode())
-				|| ServiceType.OBESITY.is(theServiceType.getCode()) ) {
-
-				if (bmiObservation != null && !bmiObservation.isEmpty()) {
-					((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(bmiObservation.getIdElement().toVersionless().getValue()).setResource(bmiObservation));
-				}
-
-			}
-
-			if (ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())) {
-				if (ha1cObservation != null && !ha1cObservation.isEmpty()) {
-					((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(ha1cObservation.getIdElement().toVersionless().getValue()).setResource(ha1cObservation));
-				}
+				bodyHeightObservation = new USCoreBodyHeight();
+				bodyHeightEhrObservation.copyValues(bodyHeightObservation);
+			} else if (theBodyHeightValue instanceof Quantity) {
+				bodyHeightObservation = new USCoreBodyHeight((Quantity) theBodyHeightValue);
+				bodyHeightObservation.setSubject(subjectReference);
+				bodyHeightObservation.setStatus(ObservationStatus.FINAL);
+				
+				// write to fhirStore.
+				saveResource(bodyHeightObservation);
 			} 
 
-			if (ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())) {
-				if (theChild != null) {
-					String lastName = "";
-					String firstName = "";
-					CodeType genderCode = new CodeType();
-					BodyWeight childWeightObservation = null;
-					BodyHeight childHeightObservation =  null;
-					for (ParametersParameterComponent child : theChild.getPart()) {
-						if ("lastName".equals(child.getName())) {
-							lastName = ((StringType) child.getValue()).getValue();
-						} else if ("firstName".equals(child.getName())) {
-							firstName = ((StringType) child.getValue()).getValue();
-						} else if ("gender".equals(child.getName())) {
-							genderCode = ((CodeType) child.getValue());
-						} else if ("height".equals(child.getName())) {
-							Type theBodyHeightValue = theChild.getValue();
-							if (theBodyHeightValue instanceof Reference) {
-								Observation childHeightEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBodyHeightValue);
-								childHeightObservation = new BodyHeight();
-								childHeightEhrObservation.copyValues(childHeightObservation);
-							} else if (theBodyHeightValue instanceof Quantity) {
-								BodyHeight childHeightEhrObservation = new BodyHeight();
-								childHeightEhrObservation.setValue((Quantity) theBodyHeightValue);
-								childHeightEhrObservation.setId(new IdType(childWeightObservation.fhirType(), UUID.randomUUID().toString()));
-							}
-						} else if ("weight".equals(child.getName())) {
-							Type theBodyWeightValue = theChild.getValue();
-							if (theBodyWeightValue instanceof Reference) {
-								Observation childWeightEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBodyWeightValue);
-								childWeightObservation = new BodyWeight();
-								childWeightEhrObservation.copyValues(childWeightObservation);
-							} else if (theBodyWeightValue instanceof Quantity) {
-								childWeightObservation = new BodyWeight();
-								childWeightObservation.setValue((Quantity) theBodyWeightValue);
-								childWeightObservation.setId(new IdType(childWeightObservation.fhirType(), UUID.randomUUID().toString()));
+			supportingInfoResources.add(bodyHeightObservation);
+			bodyHeightReference = new Reference(bodyHeightObservation.getIdElement());
+		}
 
-								// write to fhirStore.
-								saveResource(childWeightObservation);
-							}
-						}
+		Reference bodyWeightReference = null;
+		if (theBodyWeight != null) {
+			USCoreBodyWeight bodyWeightObservation = null;
+			Type theBodyWeightValue = theBodyWeight.getValue();
+			if (theBodyWeightValue instanceof Reference) {
+				Observation bodyWeightEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBodyWeightValue);
+				if (!isEqualReference(subjectReference, bodyWeightEhrObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
+					sendInternalErrorOO("bodyWeight.subject", "the Subject reference does not match with ServiceRequest.subject");
+				}
+
+				bodyWeightObservation = new USCoreBodyWeight();
+				bodyWeightEhrObservation.copyValues(bodyWeightObservation);
+			} else if (theBodyWeightValue instanceof Quantity) {
+				bodyWeightObservation = new USCoreBodyWeight((Quantity) theBodyWeightValue);
+				bodyWeightObservation.setSubject(subjectReference);
+				bodyWeightObservation.setStatus(ObservationStatus.FINAL);
+				
+				// write to fhirStore.
+				saveResource(bodyWeightObservation);
+			}
+			supportingInfoResources.add(bodyWeightObservation);
+			bodyWeightReference = new Reference(bodyWeightObservation.getIdElement());
+		}
+
+		Reference bmiReference = null;
+		if (theBmi != null) {
+			USCoreBMI bmiObservation = null;
+			Type theBmiValue = theBmi.getValue();
+			if (theBmiValue instanceof Reference) {
+				Observation bmiEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBmiValue);
+				if (!isEqualReference(subjectReference, bmiEhrObservation.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
+					sendInternalErrorOO("bmi.subject", "the Subject reference does not match with ServiceRequest.subject");
+				}
+
+				bmiObservation = new USCoreBMI();
+				bmiEhrObservation.copyValues(bmiObservation);
+			} else if (theBmiValue instanceof Quantity) {
+				bmiObservation = new USCoreBMI((Quantity) theBmiValue);
+				bmiObservation.setSubject(subjectReference);
+				bmiObservation.setStatus(ObservationStatus.FINAL);
+				
+				// write to fhirStore.
+				saveResource(bmiObservation);
+			}
+
+			supportingInfoResources.add(bmiObservation);
+			bmiReference = new Reference(bmiObservation.getIdElement());
+		}
+
+		Reference bserHa1cReference = null;
+		if (theHa1cObservation != null) {
+			BSERHA1CObservation bserHa1cObservation = null;
+			Type theHa1cObservationValue = theHa1cObservation.getValue();
+			if (theHa1cObservationValue instanceof Reference) {
+				Reference ha1cObservationReference = (Reference)theHa1cObservationValue;
+				Observation ha1cEhrObservation = (Observation) pullResourceFromFhirServer(ha1cObservationReference);
+				Reference ha1cSubjectReference = ha1cEhrObservation.getSubject();
+				if (!isEqualReference(subjectReference, ha1cSubjectReference, ha1cObservationReference.getReferenceElement().getBaseUrl())) {
+					sendInternalErrorOO("ha1cObservation.subject", "the Subject reference does not match with ServiceRequest.subject");
+				}
+
+				bserHa1cObservation = new BSERHA1CObservation();
+				ha1cEhrObservation.copyValues(bserHa1cObservation);
+				bserHa1cObservation.setStatus(ObservationStatus.FINAL);
+				bserHa1cObservation.setEffective(new DateTimeType(new Date()));
+			} else if (theHa1cObservationValue instanceof Quantity) {
+				bserHa1cObservation = new BSERHA1CObservation(
+					new CodeableConcept(new Coding("http://loinc.org", "4548-4", "Hemoglobin A1c/Hemoglobin.total in Blood")), 
+					(Quantity) theHa1cObservationValue);
+				bserHa1cObservation.setSubject(subjectReference);
+				bserHa1cObservation.setStatus(ObservationStatus.FINAL);
+				bserHa1cObservation.setEffective(new DateTimeType(new Date()));
+
+				// write to fhirStore.
+				saveResource(bserHa1cObservation);
+			} else {
+				sendInternalErrorOO("ha1cObservation", "ha1cObservation must be either Referece or Quantity");
+			}
+
+			supportingInfoResources.add(bserHa1cObservation);
+			bserHa1cReference = new Reference(bserHa1cObservation.getIdElement());
+		}
+
+		List<Reference> earlyChildhoodNutritionObReferences = new ArrayList<Reference> ();
+		Reference childWeightObservationReference = null;
+		Reference childHeightObservationReference = null;
+
+		if (theIsBabyLatching != null) {
+			BSEREarlyChildhoodNutritionObservation earlyChildNutritionObs = new BSEREarlyChildhoodNutritionObservation(BSEREarlyChildhoodNutritionObservationUtil.ableToLatch, theIsBabyLatching);
+			supportingInfoResources.add(earlyChildNutritionObs);
+			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.getIdElement()));
+
+			saveResource(earlyChildNutritionObs);
+		}
+
+		if (theMomsConcerns != null) {
+			BSEREarlyChildhoodNutritionObservation earlyChildNutritionObs = new BSEREarlyChildhoodNutritionObservation(BSEREarlyChildhoodNutritionObservationUtil.maternalConcern, theMomsConcerns);
+			supportingInfoResources.add(earlyChildNutritionObs);
+			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.getIdElement()));
+
+			saveResource(earlyChildNutritionObs);
+		}
+
+		if (theNippleShieldUse != null) {
+			BSEREarlyChildhoodNutritionObservation earlyChildNutritionObs = new BSEREarlyChildhoodNutritionObservation(BSEREarlyChildhoodNutritionObservationUtil.nippleShield, theNippleShieldUse);
+			supportingInfoResources.add(earlyChildNutritionObs);
+			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.getIdElement()));
+
+			saveResource(earlyChildNutritionObs);
+		}
+
+		if (theChild != null) {
+			String lastName = "";
+			String firstName = "";
+			CodeType genderCode = new CodeType();
+			USCoreBodyWeight childWeightObservation = null;
+			USCoreBodyHeight childHeightObservation =  null;
+			for (ParametersParameterComponent child : theChild.getPart()) {
+				if ("lastName".equals(child.getName())) {
+					lastName = ((StringType) child.getValue()).getValue();
+				} else if ("firstName".equals(child.getName())) {
+					firstName = ((StringType) child.getValue()).getValue();
+				} else if ("gender".equals(child.getName())) {
+					genderCode = ((CodeType) child.getValue());
+				} else if ("height".equals(child.getName())) {
+					Type theBodyHeightValue = theChild.getValue();
+					if (theBodyHeightValue instanceof Reference) {
+						Observation childHeightEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBodyHeightValue);
+						childHeightObservation = new USCoreBodyHeight();
+						childHeightEhrObservation.copyValues(childHeightObservation);
+					} else if (theBodyHeightValue instanceof Quantity) {
+						childHeightObservation = new USCoreBodyHeight();
+						childHeightObservation.setValue((Quantity) theBodyHeightValue);
+						childHeightObservation.setId(new IdType(childWeightObservation.fhirType(), UUID.randomUUID().toString()));
 					}
-
-					Patient childPatient = new Patient();
-					childPatient.setId(new IdType(UUID.randomUUID().toString()));
-					childPatient.addName(new HumanName().setFamily(lastName).addGiven(firstName));
-					childPatient.setGender(AdministrativeGender.fromCode(genderCode.getCode()));
-
-					((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(childPatient.getIdElement().toVersionless().getValue()).setResource(childPatient));
-
-					if (childWeightObservation != null && !childWeightObservation.isEmpty()) {
-						childWeightObservation.setSubject(new Reference(childPatient.getIdElement()));
-						// write to fhirStore.
-						saveResource(childWeightObservation);
-
-						((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(childWeightObservation.getIdElement().toVersionless().getValue()).setResource(childWeightObservation));
-					}
-
-					if (childHeightObservation != null && !childHeightObservation.isEmpty()) {
-						childHeightObservation.setSubject(new Reference(childPatient.getIdElement()));
-						// write to fhirStore.
-						saveResource(childHeightObservation);
-
-						((Bundle)supportingInfo).addEntry(new BundleEntryComponent().setFullUrl(childHeightObservation.getIdElement().toVersionless().getValue()).setResource(childHeightObservation));
+				} else if ("weight".equals(child.getName())) {
+					Type theBodyWeightValue = theChild.getValue();
+					if (theBodyWeightValue instanceof Reference) {
+						Observation childWeightEhrObservation = (Observation) pullResourceFromFhirServer((Reference)theBodyWeightValue);
+						childWeightObservation = new USCoreBodyWeight();
+						childWeightEhrObservation.copyValues(childWeightObservation);
+					} else if (theBodyWeightValue instanceof Quantity) {
+						childWeightObservation = new USCoreBodyWeight();
+						childWeightObservation.setValue((Quantity) theBodyWeightValue);
+						childWeightObservation.setId(new IdType(childWeightObservation.fhirType(), UUID.randomUUID().toString()));
 					}
 				}
 			}
+
+			Patient childPatient = new Patient();
+			childPatient.setId(new IdType(UUID.randomUUID().toString()));
+			childPatient.addName(new HumanName().setFamily(lastName).addGiven(firstName));
+			childPatient.setGender(AdministrativeGender.fromCode(genderCode.getCode()));
+			supportingInfoResources.add(childPatient);
+			saveResource(childPatient);
+
+			if (childWeightObservation != null && !childWeightObservation.isEmpty()) {
+				childWeightObservation.setSubject(new Reference(childPatient.getIdElement()));
+				// write to fhirStore.
+				saveResource(childWeightObservation);
+
+				supportingInfoResources.add(childWeightObservation);
+				childWeightObservationReference = new Reference(childWeightObservation.getIdElement());
+			}
+
+			if (childHeightObservation != null && !childHeightObservation.isEmpty()) {
+				childHeightObservation.setSubject(new Reference(childPatient.getIdElement()));
+				// write to fhirStore.
+				saveResource(childHeightObservation);
+
+				supportingInfoResources.add(childHeightObservation);
+				childHeightObservationReference = new Reference(childHeightObservation.getIdElement());
+			}
+		}
+
+		// BSeR Diagnosis
+		List<Reference> diagnosisConditionReferences = new ArrayList<Reference>();
+		if (theDiagnosis != null) {
+			for (ParametersParameterComponent diagnosis : theDiagnosis) {
+				BSERDiagnosis diagnosisCondition = new BSERDiagnosis();
+				Type diagnosisValue = diagnosis.getValue();
+				if (diagnosisValue instanceof Reference) {
+					if (diagnosisValue.getIdElement() != null) {
+						Condition respCondition = (Condition) pullResourceFromFhirServer((Reference) diagnosisValue);
+						if (!isEqualReference(subjectReference, respCondition.getSubject(), subjectReference.getReferenceElement().getBaseUrl())) {
+							sendInternalErrorOO("diagnosis.subject", "the Subject reference does not match with ServiceRequest.subject");
+						}
+		
+						respCondition.copyValues(diagnosisCondition);
+					}
+				} else if (diagnosisValue instanceof Coding) {
+					diagnosisCondition.setCode(new CodeableConcept((Coding) diagnosisValue));
+					diagnosisCondition.setSubject(subjectReference);
+					
+					// write to fhirStore.
+					saveResource(diagnosisCondition);
+				}
+
+				supportingInfoResources.add(diagnosisCondition);
+				diagnosisConditionReferences.add(new Reference(diagnosisCondition.getIdElement()));
+			}
+		}
+
+		// NRT Authorization Status
+		List<Reference> nrtAuthorizationStatusReferences = new ArrayList<Reference>();
+		if (theNrtAuthorizationStatus != null) {
+			CodeableConcept valueCodeableConcept = null;
+			if ("AP".equals(theNrtAuthorizationStatus.getValueAsString())) {
+				valueCodeableConcept = BSERNRTAuthorizationStatusUtil.approved;
+			} else if ("DE".equals(theNrtAuthorizationStatus.getValueAsString())) {
+				valueCodeableConcept = BSERNRTAuthorizationStatusUtil.denied;
+			} else if ("PE".equals(theNrtAuthorizationStatus.getValueAsString())) {
+				valueCodeableConcept = BSERNRTAuthorizationStatusUtil.pending;
+			}
+
+			BSERNRTAuthorizationStatus nrtAuthStatus = new BSERNRTAuthorizationStatus(subjectReference, valueCodeableConcept);
+
+			saveResource(nrtAuthStatus);
+
+			supportingInfoResources.add(nrtAuthStatus);
+			nrtAuthorizationStatusReferences.add(new Reference(nrtAuthStatus.getIdElement()));
+		}
+
+		Reference smokingStatusReference = null;
+		if (theSmokingStatus != null) {
+			CodeableConcept smokeStatusValue = null;
+			if (theSmokingStatus.getCode().equals("266919005")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.neverSmokedTobacco;
+			} else if (theSmokingStatus.getCode().equals("266927001")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.unknownSmokedTobacco;
+			} else if (theSmokingStatus.getCode().equals("428041000124106")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.occasionalSmokedTobacco;
+			} else if (theSmokingStatus.getCode().equals("428061000124105")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.lightSmokedTobacco;
+			} else if (theSmokingStatus.getCode().equals("428071000124103")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.heavySmokedTobacco;
+			} else if (theSmokingStatus.getCode().equals("449868002")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.dailySmokedTobacco;
+			} else if (theSmokingStatus.getCode().equals("77176002")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.smoker;
+			} else if (theSmokingStatus.getCode().equals("8517006")) {
+				smokeStatusValue = USCoreSmokingStatusObservationUtil.exSmoker;
+			}
+
+			USCoreSmokingStatusObservation smokingStatusOb = new USCoreSmokingStatusObservation( 
+				ObservationStatus.FINAL, 
+				USCoreSmokingStatusObservationUtil.tobaccoSmokingStatusNHIS,
+				subjectReference,
+				smokeStatusValue);
 			
+			saveResource(smokingStatusOb);
+
+			supportingInfoResources.add(smokingStatusOb);
+			smokingStatusReference = new Reference(smokingStatusOb.getIdElement());
+		}
+
+		List<Reference> communicationPreferencesReferences = new ArrayList<Reference>();
+		if (theCommunicationPreferences != null) {
+
+			for (ParametersParameterComponent commPref : theCommunicationPreferences.getPart()) {
+				CodeableConcept code = null;
+				StringType value = null;
+				if ("bestDay".equals(commPref.getName())) {
+					code = BSeRTelcomCommunicationPreferencesUtil.bestDay;
+				} else if ("bestTime".equals(commPref.getName())) {
+					code = BSeRTelcomCommunicationPreferencesUtil.bestTime;
+				} else if ("leaveMessage".equals(commPref.getName())) {
+					code = BSeRTelcomCommunicationPreferencesUtil.leaveMessageIndicator;
+				}
+				value = (StringType) commPref.getValue();
+
+				BSERTelcomCommunicationPreferences teleCommPrefOb = new BSERTelcomCommunicationPreferences(code, value);
+
+				saveResource(teleCommPrefOb);
+
+				supportingInfoResources.add(teleCommPrefOb);
+				communicationPreferencesReferences.add(new Reference(teleCommPrefOb.getIdElement()));
+			}
+		}
+
+		List<SectionComponent> obesityReferralSupportingInformations = new ArrayList<SectionComponent>();
+		List<SectionComponent> arthritisReferralSupportingInformations = new ArrayList<SectionComponent>();
+		List<SectionComponent> hypertensionReferralSupportingInformations = new ArrayList<SectionComponent>();
+		List<SectionComponent> earlyChildhoodNutritionReferralSupportingInformations = new ArrayList<SectionComponent>();
+		List<SectionComponent> diabetesPreventionReferralSupportingInformations = new ArrayList<SectionComponent>();
+		List<SectionComponent> tobaccoUseCessationReferralSupportingInformations = new ArrayList<SectionComponent>();
+		if (theServiceType != null) {
+			// Construct the supporting information section component for BSeR Referral Request Composition.
+			if (ServiceType.ARTHRITIS.is(theServiceType.getCode())) {
+				arthritisReferralSupportingInformations.add(BSERReferralRequestComposition.createArthritisReferralSupportingInformation(null, 
+					allergyReferences, 
+					medicationReferences, 
+					bpReference, 
+					bodyHeightReference, 
+					bodyWeightReference, 
+					bmiReference));
+				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ArthritisReferralSupportingInformation");
+			} else if (ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())) {
+				diabetesPreventionReferralSupportingInformations.add(BSERReferralRequestComposition.createDiabetesPreventionReferralSupportingInformation(null, 
+					bserHa1cReference, 
+					bpReference, 
+					bodyHeightReference, 
+					bodyWeightReference, 
+					bmiReference));
+			} else if (ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())) {
+				earlyChildhoodNutritionReferralSupportingInformations.add(BSERReferralRequestComposition.createEarlyChildhoodNutritionReferralSupportingInformation(null,
+					earlyChildhoodNutritionObReferences,
+					bpReference, 
+					childHeightObservationReference, 
+					childWeightObservationReference));
+			} else if (ServiceType.HYPERTENSION.is(theServiceType.getCode())) {
+				hypertensionReferralSupportingInformations.add(BSERReferralRequestComposition.createHypertensionReferralSupportingInformation(null, 
+					diagnosisConditionReferences, 
+					bpReference, 
+					bodyHeightReference, 
+					bodyWeightReference, 
+					bmiReference));
+			} else if (ServiceType.OBESITY.is(theServiceType.getCode())) {
+				obesityReferralSupportingInformations.add(BSERReferralRequestComposition.createObesityReferralSupportingInformation(null, 
+					allergyReferences, 
+					bpReference, 
+					bodyHeightReference, 
+					bodyWeightReference, 
+					bmiReference));
+			} else if (ServiceType.TOBACCO_USE_CESSATION.is(theServiceType.getCode())) {
+				tobaccoUseCessationReferralSupportingInformations.add(BSERReferralRequestComposition.createTobaccoUseCessationReferralSupportingInformation(null, 
+					nrtAuthorizationStatusReferences, 
+					smokingStatusReference, 
+					communicationPreferencesReferences));
+			} 
 		} else {
 			throw new FHIRException("ServiceType is missing.");
 		}
-
-		Reference supportingInfoReference = new Reference(supportingInfo.getIdElement());
-		logger.debug("Supporting Info Reference: " + supportingInfoReference.getReference());
 
 		// Referral Request Document Bundle
 		BSERReferralRequestComposition bserReferralRequestComposition= new BSERReferralRequestComposition(
@@ -1014,7 +1204,12 @@ public class ServerOperations {
 			new Date(), 
 			sourceReference, 
 			"Referral request", 
-			supportingInfoReference
+			obesityReferralSupportingInformations,
+			arthritisReferralSupportingInformations,
+			hypertensionReferralSupportingInformations,
+			earlyChildhoodNutritionReferralSupportingInformations,
+			diabetesPreventionReferralSupportingInformations,
+			tobaccoUseCessationReferralSupportingInformations
 		);
 
 		// Adding composition
@@ -1022,9 +1217,15 @@ public class ServerOperations {
 		BSERReferralRequestDocumentBundle bserReferralRequestDocumentBundle = new BSERReferralRequestDocumentBundle(bserReferralRequestComposition);
 		bserReferralRequestDocumentBundle.setTimestamp(new Date());
 
-		// Adding supporting information for ServiceRequest
+		// Adding supporting information document for ServiceRequest
 		bserReferralRequestDocumentBundle.setId(new IdType(bserReferralRequestDocumentBundle.fhirType(), UUID.randomUUID().toString()));
-		bserReferralRequestDocumentBundle.addEntry(new BundleEntryComponent().setFullUrl(((Bundle)supportingInfo).getIdElement().toVersionless().getValue()).setResource((Bundle)supportingInfo));
+
+		for (Resource resource : supportingInfoResources) {
+			BundleEntryComponent bundleEntryComp = new BundleEntryComponent().setFullUrl(resource.getIdElement().toVersionless().getValue()).setResource(resource);
+			bserReferralRequestDocumentBundle.addEntry(bundleEntryComp);
+		}
+
+		// bserReferralRequestDocumentBundle.addEntry(new BundleEntryComponent().setFullUrl(((Bundle)supportingInfo).getIdElement().toVersionless().getValue()).setResource((Bundle)supportingInfo));
 
 		// subject:Patient is already present in upper level. But, we need to add the subject in this
 		// bundle as well in order for this to get validated.
@@ -1045,7 +1246,7 @@ public class ServerOperations {
 		// }
 
 		// According to the BSeR IG http://build.fhir.org/ig/HL7/bser/StructureDefinition-BSeR-ReferralRequestDocumentBundle.html
-		// bdl-9 and 10 say that for Bundle.type = document, idetifier.system and .value must exit.
+		// bdl-9 and 10 say that for Bundle.type = document, idetifier.system and .value must exist.
 		Identifier identifier = new Identifier();
 		identifier.setSystem("urn:bser:request:document");
 		identifier.setValue(UUID.randomUUID().toString());
@@ -1083,6 +1284,7 @@ public class ServerOperations {
 			TaskStatus.REQUESTED, 
 			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "2.0", "Service Request Created")), 
 			new Reference(serviceRequest.getIdElement()), 
+			subjectReference,
 			new Date(), 
 			sourceReference, 
 			targetReference);
@@ -1090,8 +1292,11 @@ public class ServerOperations {
 		bserReferralTask.setIntent(TaskIntent.ORDER);
 
 		// create Task resource in the fhirStore. id will be assigned.
-		// bserReferralTask.setId(new IdType(bserReferralTask.fhirType(), UUID.randomUUID().toString()));
 		saveResource(bserReferralTask);
+		if (bserReferralTask.getIdElement().isEmpty()) {
+			// we may not able to save this. assign one.
+			bserReferralTask.setId(new IdType(bserReferralTask.fhirType(), UUID.randomUUID().toString()));
+		}
 
 		// BSeR Referral Message Header focus Task
 		BSERReferralMessageHeader bserReferralMessageHeader = new BSERReferralMessageHeader(targetReference, sourceReference, 
@@ -1182,7 +1387,7 @@ public class ServerOperations {
 		FhirContext ctx = StaticValues.myFhirContext; 
 		ctx.getRestfulClientFactory().setServerValidationMode(ServerValidationModeEnum.NEVER);
 
-		if (!"true".equalsIgnoreCase(System.getenv("RECIPIENT_NOT_READY"))) {
+		if (recipientReady) {
 			IGenericClient client;
 			if (targetEndpointUrl != null && !targetEndpointUrl.isBlank()) {
 				IParser parser = ctx.newJsonParser();
@@ -1193,7 +1398,10 @@ public class ServerOperations {
 				if ("YUSA".equals(recipientAA.getRecipientSite())) {
 					// This is YUSA endpoint, which does not have FHIR messaging operation name.
 					String respYusa = recipientAA.submitYusaRR(targetEndpointUrl, messageBundleJson);
-					warningMessage = warningMessage.concat("Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
+					if (!warningMessage.isBlank())
+						warningMessage = warningMessage.concat(" Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
+					else
+						warningMessage = warningMessage.concat("Submitted to YUSA in Restful POST and recieved response(s) = " + respYusa + "\n");
 				} else {
 					String accessToken = null;
 					try {
@@ -1228,7 +1436,10 @@ public class ServerOperations {
 
 			}
 		} else {
-			warningMessage = warningMessage.concat("Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
+			if (!warningMessage.isBlank())
+				warningMessage = warningMessage.concat(" Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
+			else
+				warningMessage = warningMessage.concat("Referral Request has NOT been submitted because submission is disabled. Enable it by setting 'RECIPIENT_NOT_READY' to false. ");
 		}
 
 		// Save Message before submission.
@@ -1236,7 +1447,8 @@ public class ServerOperations {
 				
 		// return anything if needed in Parameters
 		Parameters returnParameters = new Parameters();
-		returnParameters.addParameter("referral_request", new Reference(messageBundle.getIdElement()));
+		returnParameters.addParameter("referral_request_reference", new Reference(messageBundle.getIdElement()));
+		returnParameters.addParameter().setName("referral_request_resource").setResource(messageBundle);
 		ParametersParameterComponent recipientParam = new ParametersParameterComponent(new StringType("recipient_endpoint"));
 		recipientParam.setResource(targetEndpoint);
 		returnParameters.addParameter(recipientParam);
@@ -1298,6 +1510,10 @@ public class ServerOperations {
 		}
 
 		if (theContent.getType() == BundleType.MESSAGE) {
+			IParser parser = StaticValues.myFhirContext.newJsonParser();
+			String responseString = parser.encodeResourceToString(theContent);	
+			logger.debug("Received Feedback Message Bundle " + responseString);
+
 			List<BundleEntryComponent> entries = theContent.getEntry();
 
 			// Evaluate the first entry, which must be MessageHeader
@@ -1374,34 +1590,37 @@ public class ServerOperations {
 
 			saveResource(bserReferralFeedbackDocument);
 
-			BSERReferralTask bserReferralTaskFromFhirStore = (BSERReferralTask) pullResourceFromFhirServer(referralTaskReference);
-			bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
+			BSERReferralTask bserReferralTaskFromFhirStore = null;
+			if (fhirStore != null && !fhirStore.isBlank()) {
+				bserReferralTaskFromFhirStore = (BSERReferralTask) pullResourceFromFhirServer(referralTaskReference);
+				bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
 
-			// We just stored BSER Referral Feedback Document. Relink this
-			bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralTask.getIdElement()));
-			updateResource(bserReferralTaskFromFhirStore);
+				// We just stored BSER Referral Feedback Document. Relink this
+				bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralFeedbackDocument.getIdElement()));
+				updateResource(bserReferralTaskFromFhirStore);
 
-			// We also need to update ServiceRequest
-			Reference serviceRequestReference = bserReferralTaskFromFhirStore.getFocus();
-			BSERReferralServiceRequest referralServiceRequestInFeedback = null;
-			for (BundleEntryComponent entry : entries) {
-				resource = entry.getResource();
-				if (resource instanceof ServiceRequest) {
-					if (entry.getFullUrl().contains(serviceRequestReference.getId())) {
-						referralServiceRequestInFeedback = (BSERReferralServiceRequest) resource;
+				// We also need to update ServiceRequest
+				Reference serviceRequestReference = bserReferralTaskFromFhirStore.getFocus();
+				BSERReferralServiceRequest referralServiceRequestInFeedback = null;
+				for (BundleEntryComponent entry : entries) {
+					resource = entry.getResource();
+					if (resource instanceof ServiceRequest) {
+						if (entry.getFullUrl().contains(serviceRequestReference.getId())) {
+							referralServiceRequestInFeedback = (BSERReferralServiceRequest) resource;
+						}
 					}
 				}
+
+				if (referralServiceRequestInFeedback == null || referralServiceRequestInFeedback.isEmpty()) {
+					throw new FHIRException("Referral ServiceRequest is empty or does not exit.");
+				}
+
+				// Now obtain the ServiceRequest from fhirStore.
+				BSERReferralServiceRequest bserReferralServiceRequestFromFhirStore = (BSERReferralServiceRequest) pullResourceFromFhirServer(serviceRequestReference);
+				referralServiceRequestInFeedback.copyValues(bserReferralServiceRequestFromFhirStore);
+
+				updateResource(bserReferralServiceRequestFromFhirStore);			
 			}
-
-			if (referralServiceRequestInFeedback == null || referralServiceRequestInFeedback.isEmpty()) {
-				throw new FHIRException("Referral ServiceRequest is empty or does not exit.");
-			}
-
-			// Now obtain the ServiceRequest from fhirStore.
-			BSERReferralServiceRequest bserReferralServiceRequestFromFhirStore = (BSERReferralServiceRequest) pullResourceFromFhirServer(serviceRequestReference);
-			referralServiceRequestInFeedback.copyValues(bserReferralServiceRequestFromFhirStore);
-
-			updateResource(bserReferralServiceRequestFromFhirStore);			
 		} else {
 			throw new FHIRException("The bundle must be a MESSAGE type");
 		}
