@@ -531,7 +531,8 @@ public class ServerOperations {
 
 		// Save this patient and rewrite the subject to serviceRequest.
 		saveResource(thePatient);
-		subjectReference = new Reference(thePatient.getIdElement());
+		String subjectName = thePatient.getNameFirstRep().getGivenAsSingleString() + " " + thePatient.getNameFirstRep().getFamily();
+		subjectReference = new Reference(thePatient.getIdElement()).setDisplay(subjectName);
 		serviceRequest.setSubject(subjectReference);
 
 		// Get the initator PractitionerRole resource. This is ServiceRequest.requester.
@@ -925,12 +926,14 @@ public class ServerOperations {
 				bserHa1cObservation = new BSERHA1CObservation();
 				ha1cEhrObservation.copyValues(bserHa1cObservation);
 				bserHa1cObservation.setStatus(ObservationStatus.FINAL);
+				bserHa1cObservation.setEffective(new DateTimeType(new Date()));
 			} else if (theHa1cObservationValue instanceof Quantity) {
 				bserHa1cObservation = new BSERHA1CObservation(
 					new CodeableConcept(new Coding("http://loinc.org", "4548-4", "Hemoglobin A1c/Hemoglobin.total in Blood")), 
 					(Quantity) theHa1cObservationValue);
 				bserHa1cObservation.setSubject(subjectReference);
 				bserHa1cObservation.setStatus(ObservationStatus.FINAL);
+				bserHa1cObservation.setEffective(new DateTimeType(new Date()));
 
 				// write to fhirStore.
 				saveResource(bserHa1cObservation);
@@ -1587,7 +1590,7 @@ public class ServerOperations {
 			bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
 
 			// We just stored BSER Referral Feedback Document. Relink this
-			bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralTask.getIdElement()));
+			bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralFeedbackDocument.getIdElement()));
 			updateResource(bserReferralTaskFromFhirStore);
 
 			// We also need to update ServiceRequest
