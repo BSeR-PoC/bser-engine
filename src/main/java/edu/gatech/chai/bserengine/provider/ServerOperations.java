@@ -1510,6 +1510,10 @@ public class ServerOperations {
 		}
 
 		if (theContent.getType() == BundleType.MESSAGE) {
+			IParser parser = StaticValues.myFhirContext.newJsonParser();
+			String responseString = parser.encodeResourceToString(theContent);	
+			logger.debug("Received Feedback Message Bundle " + responseString);
+
 			List<BundleEntryComponent> entries = theContent.getEntry();
 
 			// Evaluate the first entry, which must be MessageHeader
@@ -1586,34 +1590,37 @@ public class ServerOperations {
 
 			saveResource(bserReferralFeedbackDocument);
 
-			BSERReferralTask bserReferralTaskFromFhirStore = (BSERReferralTask) pullResourceFromFhirServer(referralTaskReference);
-			bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
+			BSERReferralTask bserReferralTaskFromFhirStore = null;
+			if (fhirStore != null && !fhirStore.isBlank()) {
+				bserReferralTaskFromFhirStore = (BSERReferralTask) pullResourceFromFhirServer(referralTaskReference);
+				bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
 
-			// We just stored BSER Referral Feedback Document. Relink this
-			bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralFeedbackDocument.getIdElement()));
-			updateResource(bserReferralTaskFromFhirStore);
+				// We just stored BSER Referral Feedback Document. Relink this
+				bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralFeedbackDocument.getIdElement()));
+				updateResource(bserReferralTaskFromFhirStore);
 
-			// We also need to update ServiceRequest
-			Reference serviceRequestReference = bserReferralTaskFromFhirStore.getFocus();
-			BSERReferralServiceRequest referralServiceRequestInFeedback = null;
-			for (BundleEntryComponent entry : entries) {
-				resource = entry.getResource();
-				if (resource instanceof ServiceRequest) {
-					if (entry.getFullUrl().contains(serviceRequestReference.getId())) {
-						referralServiceRequestInFeedback = (BSERReferralServiceRequest) resource;
+				// We also need to update ServiceRequest
+				Reference serviceRequestReference = bserReferralTaskFromFhirStore.getFocus();
+				BSERReferralServiceRequest referralServiceRequestInFeedback = null;
+				for (BundleEntryComponent entry : entries) {
+					resource = entry.getResource();
+					if (resource instanceof ServiceRequest) {
+						if (entry.getFullUrl().contains(serviceRequestReference.getId())) {
+							referralServiceRequestInFeedback = (BSERReferralServiceRequest) resource;
+						}
 					}
 				}
+
+				if (referralServiceRequestInFeedback == null || referralServiceRequestInFeedback.isEmpty()) {
+					throw new FHIRException("Referral ServiceRequest is empty or does not exit.");
+				}
+
+				// Now obtain the ServiceRequest from fhirStore.
+				BSERReferralServiceRequest bserReferralServiceRequestFromFhirStore = (BSERReferralServiceRequest) pullResourceFromFhirServer(serviceRequestReference);
+				referralServiceRequestInFeedback.copyValues(bserReferralServiceRequestFromFhirStore);
+
+				updateResource(bserReferralServiceRequestFromFhirStore);			
 			}
-
-			if (referralServiceRequestInFeedback == null || referralServiceRequestInFeedback.isEmpty()) {
-				throw new FHIRException("Referral ServiceRequest is empty or does not exit.");
-			}
-
-			// Now obtain the ServiceRequest from fhirStore.
-			BSERReferralServiceRequest bserReferralServiceRequestFromFhirStore = (BSERReferralServiceRequest) pullResourceFromFhirServer(serviceRequestReference);
-			referralServiceRequestInFeedback.copyValues(bserReferralServiceRequestFromFhirStore);
-
-			updateResource(bserReferralServiceRequestFromFhirStore);			
 		} else {
 			throw new FHIRException("The bundle must be a MESSAGE type");
 		}
