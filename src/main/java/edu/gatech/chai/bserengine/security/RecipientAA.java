@@ -174,7 +174,8 @@ public class RecipientAA {
         }
 
         if (myAccessToken != null && !myAccessToken.isBlank()) {
-            headers.add("Bearer", myAccessToken);
+            // headers.add("Bearer", myAccessToken);
+            headers.setBearerAuth(myAccessToken);
         }
 
         logger.debug("Sending to YUSA (" + targetUrl + ") with AccessToken: " + myAccessToken);
