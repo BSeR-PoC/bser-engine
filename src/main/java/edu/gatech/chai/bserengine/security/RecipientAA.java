@@ -12,6 +12,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 @Component
@@ -78,7 +79,7 @@ public class RecipientAA {
         return accessToken;
     }
 
-    public String getAccessToken() throws ParseException {
+    public String getAccessToken() throws ParseException, RestClientException {
         if (!isReady()) {
             return null;
         }
@@ -125,6 +126,8 @@ public class RecipientAA {
 
                     // Get accessCode
                     accessToken = getYUSAAccessToken (headers, restTemplate, parser, now);
+                } else {
+                    throw new FHIRException("Failed to get access token (" + responseEntity.getStatusCode() + "): " + responseEntity.getBody());
                 }
             }    
         }
@@ -170,12 +173,15 @@ public class RecipientAA {
             myAccessToken = getAccessToken();
         } catch (ParseException e) {
             e.printStackTrace();
-            myAccessToken = null;
+            throw new FHIRException("Failed to parse the access token from response");
         }
 
         if (myAccessToken != null && !myAccessToken.isBlank()) {
             // headers.add("Bearer", myAccessToken);
             headers.setBearerAuth(myAccessToken);
+        } else {
+            logger.error("Failed to get access token.");
+            throw new FHIRException("Failed to getAccessToken.");
         }
 
         logger.debug("Sending to YUSA (" + targetUrl + ") with AccessToken: " + myAccessToken);

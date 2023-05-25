@@ -276,7 +276,7 @@ public class ServerOperations {
 	}
 
 	private void saveResource (IBaseResource resource) {
-		if (fhirStore == null || fhirStore.isBlank()) {
+		if (fhirStore == null || fhirStore.isBlank() || resource == null) {
 			return;
 		}
 
@@ -296,7 +296,7 @@ public class ServerOperations {
 	}
 
 	private void updateResource (IBaseResource resource) {
-		if (fhirStore == null || fhirStore.isBlank()) {
+		if (fhirStore == null || fhirStore.isBlank() || resource == null) {
 			return;
 		}
 
@@ -531,8 +531,9 @@ public class ServerOperations {
 
 		// Save this patient and rewrite the subject to serviceRequest.
 		saveResource(thePatient);
+
 		String subjectName = thePatient.getNameFirstRep().getGivenAsSingleString() + " " + thePatient.getNameFirstRep().getFamily();
-		subjectReference = new Reference(thePatient.getIdElement()).setDisplay(subjectName);
+		subjectReference = new Reference("Patient" + "/" + thePatient.getIdPart()).setDisplay(subjectName);
 		serviceRequest.setSubject(subjectReference);
 
 		// Get the initator PractitionerRole resource. This is ServiceRequest.requester.
@@ -545,7 +546,7 @@ public class ServerOperations {
 		if (theRequester == null) {
 			if ("Practitioner".equals(requesterReference.getType())) {
 				// We have practitioner. Get practitoinerRole from FHIR server.
-				sourcePractitioner = (Practitioner) pullResourceFromFhirServer(sourceReference);
+				sourcePractitioner = (Practitioner) pullResourceFromFhirServer(requesterReference);
 			}
 
 			if (sourcePractitioner == null || sourcePractitioner.isEmpty()) {
@@ -567,7 +568,6 @@ public class ServerOperations {
 				PractitionerRole.PRACTITIONER.hasId(sourcePractitioner.getIdElement().getIdPart()),
 				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT);
 		} else {
-			sourceReference = requesterReference;
 			searchBundle = searchResourceFromFhirServer(
 				// requesterReference may be Practitioner. Ok to use this URL as both practitioner and practitionerRole hasve the same base URL
 				requesterReference.getReferenceElement().getBaseUrl(), 
@@ -582,13 +582,6 @@ public class ServerOperations {
 			Resource resource = entry.getResource();
 			if (resource instanceof PractitionerRole) {
 				sourceEhrPractitionerRole = (PractitionerRole) resource;
-				if ("Practitioner".equals(requesterReference.getType())) {
-					sourceReference = new Reference (new IdType(
-						sourceEhrPractitionerRole.getIdElement().getBaseUrl(), 
-						sourceEhrPractitionerRole.fhirType(), 
-						sourceEhrPractitionerRole.getIdElement().getIdPart(), 
-						sourceEhrPractitionerRole.getIdElement().getVersionIdPart()));
-				}
 			} else if (resource instanceof Organization) {
 				sourceEhrOrganization = (Organization) resource;
 			} else if (resource instanceof Endpoint) {
@@ -618,7 +611,7 @@ public class ServerOperations {
 
 		saveResource(sourceOrganization);
 		
-		sourceOrganizationReference = new Reference(sourceOrganization.getIdElement());
+		sourceOrganizationReference = new Reference(sourceOrganization.fhirType() + "/" + sourceOrganization.getIdPart());
 		sourcePractitionerRole.setOrganization(sourceOrganizationReference);
 
 		// We must provide Endpoint so that recipient can find the endpoint to send feedback back.
@@ -629,6 +622,7 @@ public class ServerOperations {
 			bserEndpointProcessMessageUrl = bserEndpointUrl+"/$process-message";
 		}
 
+		Reference sourceEnpointReference = null;
 		if (sourceEndpoint == null || sourceEndpoint.isEmpty()) {
 			sourceEndpoint = new Endpoint();
 			sourceEndpoint.setStatus(EndpointStatus.ACTIVE);
@@ -636,15 +630,20 @@ public class ServerOperations {
 			sourceEndpoint.addPayloadType(new CodeableConcept().setText("BSeR Referral Request Message"));
 			sourceEndpoint.setAddress(bserEndpointProcessMessageUrl);
 			sourceEndpoint.setId(new IdType(sourceEndpoint.fhirType(), UUID.randomUUID().toString()));
-			sourcePractitionerRole.addEndpoint(new Reference(sourceEndpoint.getIdElement()));
+			sourceEnpointReference = new Reference(sourceEndpoint.fhirType() + "/" + sourceEndpoint.getIdPart());
+			sourcePractitionerRole.addEndpoint(sourceEnpointReference);
 		}
 
 		saveResource(sourcePractitionerRole);
-		
-		if (sourceReference == null || sourceReference.isEmpty()) {
-			sourceReference = new Reference(sourcePractitionerRole.getIdElement());
-		}
+		sourceReference = new Reference(sourcePractitionerRole.fhirType() + "/" + sourcePractitionerRole.getIdPart());
 
+		// set the srouceReference with the final practitionerRole.
+		// sourceReference = new Reference (new IdType(
+		// 	sourcePractitionerRole.getIdElement().getBaseUrl(), 
+		// 	sourcePractitionerRole.fhirType(), 
+		// 	sourcePractitionerRole.getIdElement().getIdPart(), 
+		// 	sourcePractitionerRole.getIdElement().getVersionIdPart()));
+		
 		// Get target (or recipient) practitioner resource. include practitioner, organization, endpoint, and healthService resources.
 		targetReference = serviceRequest.getPerformerFirstRep();
 		searchBundle = searchResourceFromFhirServer(
@@ -674,7 +673,7 @@ public class ServerOperations {
 			sendInternalErrorOO("ServiceRequest.performer", "The ServiceRequest.performer: " + targetReference.getReference() + " does not seem to exist.");
 		}
 
-		targetOrganization = new BSEROrganization(true, "Rexcipient Organzation");
+		targetOrganization = new BSEROrganization(true, "Recipient Organzation");
 		if (targetEhrOrganization == null || targetEhrOrganization.isEmpty()) {
 			// We were not able to resolve the targetOrganization from EHR. 
 			// Construct one as best as you can
@@ -716,9 +715,12 @@ public class ServerOperations {
 
 			targetEndpoint.addPayloadType(new CodeableConcept().setText("BSeR Referral Request Message"));
 			targetEndpoint.setId(new IdType(targetEndpoint.fhirType(), UUID.randomUUID().toString()));
-			targetEhrPractitionerRole.addEndpoint(new Reference(targetEndpoint.getIdElement()));
+			targetEhrPractitionerRole.addEndpoint(new Reference(targetEndpoint.fhirType()+"/"+targetEndpoint.getIdPart()));
 			// throw new FHIRException("RecipientPractitionerRole.Endpoint and Endpoint.address cannot be null or empty");
 		}
+
+		Reference targetEndpointReference = new Reference(targetEndpoint.fhirType()+"/"+targetEndpoint.getIdPart());
+
 
 		// if (!targetEndpointUrl.endsWith("$process-message")) {
 		// 	warningMessage = warningMessage.concat("The recipient endpoint URL does not end with $process-message. The $process-message is prepended. ");
@@ -775,7 +777,7 @@ public class ServerOperations {
 
 				// Add Allergy to the list
 				supportingInfoResources.add(usCoreAllergyIntolerance);
-				allergyReferences.add(new Reference(usCoreAllergyIntolerance.getIdElement()));
+				allergyReferences.add(new Reference(usCoreAllergyIntolerance.fhirType()+"/"+usCoreAllergyIntolerance.getIdPart()));
 
 				saveResource(usCoreAllergyIntolerance);
 			}
@@ -794,7 +796,7 @@ public class ServerOperations {
 
 				// Add Allergy to the list
 				supportingInfoResources.add(bserMedicationStatement);
-				medicationReferences.add(new Reference(bserMedicationStatement.getIdElement()));
+				medicationReferences.add(new Reference(bserMedicationStatement.fhirType()+"/"+bserMedicationStatement.getIdPart()));
 
 				saveResource(bserMedicationStatement);
 			}
@@ -833,7 +835,7 @@ public class ServerOperations {
 				saveResource(bpObservation);
 			}
 			supportingInfoResources.add(bpObservation);
-			bpReference = new Reference(bpObservation.getIdElement());
+			bpReference = new Reference(bpObservation.fhirType()+"/"+bpObservation.getIdPart());
 		}
 
 		Reference bodyHeightReference = null;
@@ -859,7 +861,7 @@ public class ServerOperations {
 			} 
 
 			supportingInfoResources.add(bodyHeightObservation);
-			bodyHeightReference = new Reference(bodyHeightObservation.getIdElement());
+			bodyHeightReference = new Reference(bodyHeightObservation.fhirType()+"/"+bodyHeightObservation.getIdPart());
 		}
 
 		Reference bodyWeightReference = null;
@@ -883,7 +885,7 @@ public class ServerOperations {
 				saveResource(bodyWeightObservation);
 			}
 			supportingInfoResources.add(bodyWeightObservation);
-			bodyWeightReference = new Reference(bodyWeightObservation.getIdElement());
+			bodyWeightReference = new Reference(bodyWeightObservation.fhirType()+"/"+bodyWeightObservation.getIdPart());
 		}
 
 		Reference bmiReference = null;
@@ -908,7 +910,7 @@ public class ServerOperations {
 			}
 
 			supportingInfoResources.add(bmiObservation);
-			bmiReference = new Reference(bmiObservation.getIdElement());
+			bmiReference = new Reference(bmiObservation.fhirType()+"/"+bmiObservation.getIdPart());
 		}
 
 		Reference bserHa1cReference = null;
@@ -942,7 +944,7 @@ public class ServerOperations {
 			}
 
 			supportingInfoResources.add(bserHa1cObservation);
-			bserHa1cReference = new Reference(bserHa1cObservation.getIdElement());
+			bserHa1cReference = new Reference(bserHa1cObservation.fhirType()+"/"+bserHa1cObservation.getIdPart());
 		}
 
 		List<Reference> earlyChildhoodNutritionObReferences = new ArrayList<Reference> ();
@@ -952,7 +954,7 @@ public class ServerOperations {
 		if (theIsBabyLatching != null) {
 			BSEREarlyChildhoodNutritionObservation earlyChildNutritionObs = new BSEREarlyChildhoodNutritionObservation(BSEREarlyChildhoodNutritionObservationUtil.ableToLatch, theIsBabyLatching);
 			supportingInfoResources.add(earlyChildNutritionObs);
-			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.getIdElement()));
+			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.fhirType()+"/"+earlyChildNutritionObs.getIdPart()));
 
 			saveResource(earlyChildNutritionObs);
 		}
@@ -960,7 +962,7 @@ public class ServerOperations {
 		if (theMomsConcerns != null) {
 			BSEREarlyChildhoodNutritionObservation earlyChildNutritionObs = new BSEREarlyChildhoodNutritionObservation(BSEREarlyChildhoodNutritionObservationUtil.maternalConcern, theMomsConcerns);
 			supportingInfoResources.add(earlyChildNutritionObs);
-			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.getIdElement()));
+			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.fhirType()+"/"+earlyChildNutritionObs.getIdPart()));
 
 			saveResource(earlyChildNutritionObs);
 		}
@@ -968,7 +970,7 @@ public class ServerOperations {
 		if (theNippleShieldUse != null) {
 			BSEREarlyChildhoodNutritionObservation earlyChildNutritionObs = new BSEREarlyChildhoodNutritionObservation(BSEREarlyChildhoodNutritionObservationUtil.nippleShield, theNippleShieldUse);
 			supportingInfoResources.add(earlyChildNutritionObs);
-			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.getIdElement()));
+			earlyChildhoodNutritionObReferences.add(new Reference(earlyChildNutritionObs.fhirType()+"/"+earlyChildNutritionObs.getIdPart()));
 
 			saveResource(earlyChildNutritionObs);
 		}
@@ -1019,21 +1021,21 @@ public class ServerOperations {
 			saveResource(childPatient);
 
 			if (childWeightObservation != null && !childWeightObservation.isEmpty()) {
-				childWeightObservation.setSubject(new Reference(childPatient.getIdElement()));
+				childWeightObservation.setSubject(new Reference(childPatient.fhirType()+"/"+childPatient.getIdPart()));
 				// write to fhirStore.
 				saveResource(childWeightObservation);
 
 				supportingInfoResources.add(childWeightObservation);
-				childWeightObservationReference = new Reference(childWeightObservation.getIdElement());
+				childWeightObservationReference = new Reference(childWeightObservation.fhirType()+"/"+childWeightObservation.getIdPart());
 			}
 
 			if (childHeightObservation != null && !childHeightObservation.isEmpty()) {
-				childHeightObservation.setSubject(new Reference(childPatient.getIdElement()));
+				childHeightObservation.setSubject(new Reference(childPatient.fhirType()+"/"+childPatient.getIdPart()));
 				// write to fhirStore.
 				saveResource(childHeightObservation);
 
 				supportingInfoResources.add(childHeightObservation);
-				childHeightObservationReference = new Reference(childHeightObservation.getIdElement());
+				childHeightObservationReference = new Reference(childHeightObservation.fhirType()+"/"+childHeightObservation.getIdPart());
 			}
 		}
 
@@ -1061,7 +1063,7 @@ public class ServerOperations {
 				}
 
 				supportingInfoResources.add(diagnosisCondition);
-				diagnosisConditionReferences.add(new Reference(diagnosisCondition.getIdElement()));
+				diagnosisConditionReferences.add(new Reference(diagnosisCondition.fhirType()+"/"+diagnosisCondition.getIdPart()));
 			}
 		}
 
@@ -1115,7 +1117,7 @@ public class ServerOperations {
 			saveResource(smokingStatusOb);
 
 			supportingInfoResources.add(smokingStatusOb);
-			smokingStatusReference = new Reference(smokingStatusOb.getIdElement());
+			smokingStatusReference = new Reference(smokingStatusOb.fhirType()+"/"+smokingStatusOb.getIdPart());
 		}
 
 		List<Reference> communicationPreferencesReferences = new ArrayList<Reference>();
@@ -1138,7 +1140,7 @@ public class ServerOperations {
 				saveResource(teleCommPrefOb);
 
 				supportingInfoResources.add(teleCommPrefOb);
-				communicationPreferencesReferences.add(new Reference(teleCommPrefOb.getIdElement()));
+				communicationPreferencesReferences.add(new Reference(teleCommPrefOb.fhirType()+"/"+teleCommPrefOb.getIdPart()));
 			}
 		}
 
@@ -1221,7 +1223,7 @@ public class ServerOperations {
 		bserReferralRequestDocumentBundle.setId(new IdType(bserReferralRequestDocumentBundle.fhirType(), UUID.randomUUID().toString()));
 
 		for (Resource resource : supportingInfoResources) {
-			BundleEntryComponent bundleEntryComp = new BundleEntryComponent().setFullUrl(resource.getIdElement().toVersionless().getValue()).setResource(resource);
+			BundleEntryComponent bundleEntryComp = new BundleEntryComponent().setFullUrl(resource.fhirType()+"/"+resource.getIdPart()).setResource(resource);
 			bserReferralRequestDocumentBundle.addEntry(bundleEntryComp);
 		}
 
@@ -1251,9 +1253,9 @@ public class ServerOperations {
 		identifier.setSystem("urn:bser:request:document");
 		identifier.setValue(UUID.randomUUID().toString());
 		bserReferralRequestDocumentBundle.setIdentifier(identifier);
+		Reference bserReferralRequestDocumentBundleReference = new Reference(bserReferralRequestDocumentBundle.fhirType() + "/" + bserReferralRequestDocumentBundle.getIdPart());
 
-
-		serviceRequest.addSupportingInfo(new Reference(bserReferralRequestDocumentBundle.getIdElement()));		
+		serviceRequest.addSupportingInfo(bserReferralRequestDocumentBundleReference);		
 
 		// serviceRequest, which is from UI has Practitioner for the requester. Overwrite this with parctitionerRole.
 		serviceRequest.setRequester(sourceReference);
@@ -1265,7 +1267,8 @@ public class ServerOperations {
 		String uniqueIdentifierValue = UUID.randomUUID().toString();
 		String identifierSystem = "urn:bser:request:id";
 		serviceRequest.setInitiatorIdentifier(identifierSystem, uniqueIdentifierValue, sourceOrganizationReference);
-		Reference targetOrganizationReference = (targetOrganization == null || targetOrganization.isEmpty())?null:new Reference(targetOrganization.getIdElement());
+		
+		Reference targetOrganizationReference = (targetOrganization == null || targetOrganization.isEmpty())?null:new Reference(targetOrganization.fhirType()+"/"+targetOrganization.getIdPart());
 
 		// Set the recipient identifier. This is an optional. If we have organization information, set this identifier.
 		if (targetOrganizationReference != null && !targetOrganizationReference.isEmpty()) {
@@ -1275,7 +1278,7 @@ public class ServerOperations {
 		serviceRequest.setOccurrence(new DateTimeType(new Date()));
 
 		updateResource(serviceRequest);
-
+		Reference serviceRequestReference = new Reference(serviceRequest.fhirType() + "/" + serviceRequest.getIdPart());
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
 			identifierSystem, uniqueIdentifierValue,
 			identifierSystem, uniqueIdentifierValue,
@@ -1283,7 +1286,7 @@ public class ServerOperations {
 			targetOrganizationReference,
 			TaskStatus.REQUESTED, 
 			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "2.0", "Service Request Created")), 
-			new Reference(serviceRequest.getIdElement()), 
+			serviceRequestReference, 
 			subjectReference,
 			new Date(), 
 			sourceReference, 
@@ -1298,9 +1301,15 @@ public class ServerOperations {
 			bserReferralTask.setId(new IdType(bserReferralTask.fhirType(), UUID.randomUUID().toString()));
 		}
 
+		Reference bserReferralTaskReference = new Reference(bserReferralTask.fhirType() + "/" + bserReferralTask.getIdPart());
+
 		// BSeR Referral Message Header focus Task
-		BSERReferralMessageHeader bserReferralMessageHeader = new BSERReferralMessageHeader(targetReference, sourceReference, 
-			new Reference(bserReferralTask.getIdElement()), bserEndpointProcessMessageUrl, targetEndpointUrl);
+		BSERReferralMessageHeader bserReferralMessageHeader = new BSERReferralMessageHeader(
+			targetReference, 
+			sourceReference, 
+			bserReferralTaskReference, 
+			bserEndpointProcessMessageUrl, 
+			targetEndpointUrl);
 		bserReferralMessageHeader.setId(new IdType(bserReferralMessageHeader.fhirType(), UUID.randomUUID().toString()));
 
 		/*** 
@@ -1317,47 +1326,47 @@ public class ServerOperations {
 		// be included in this message bundle entry.
 
 		// Task Resource (messageHeader.focus)
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(bserReferralTask.getIdElement().toVersionless().getValue()).setResource(bserReferralTask));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(bserReferralTaskReference.getReference()).setResource(bserReferralTask));
 
 		// Service Request (task.focus)
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(serviceRequest.getIdElement().toVersionless().getValue()).setResource(serviceRequest));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(serviceRequestReference.getReference()).setResource(serviceRequest));
 
 		// Referral Request Document Bundle (serviceRequest.supprotingInfo).
 		// The refferral request document bundle includes resources as well. Those are taken care of when this bundle is created above.
 		// Profile is not generated when bundle is set to dataelement. So, set it manually.
 		// bserReferralRequestDocumentBundle.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ReferralRequestDocumentBundle");
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(bserReferralRequestDocumentBundle.getIdElement().toVersionless().getValue()).setResource(bserReferralRequestDocumentBundle));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(bserReferralRequestDocumentBundleReference.getReference()).setResource(bserReferralRequestDocumentBundle));
 
 		// Patient resource. This is referenced by almost all resources.
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(thePatient.getIdElement().toVersionless().getValue()).setResource(thePatient));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(subjectReference.getReference()).setResource(thePatient));
 
 		// Task and Service Request resources have initiator and recipient practitionerRole. And, it may include practitioner. 
 		// Add these resources here.
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourcePractitionerRole.getIdElement().toVersionless().getValue()).setResource(sourcePractitionerRole));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceReference.getReference()).setResource(sourcePractitionerRole));
 		if (sourcePractitioner != null && !sourcePractitioner.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourcePractitioner.getIdElement().toVersionless().getValue()).setResource(sourcePractitioner));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourcePractitioner.fhirType()+"/"+sourcePractitioner.getIdPart()).setResource(sourcePractitioner));
 		}
 		if (sourceOrganization != null && !sourceOrganization.isEmpty())
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceOrganization.getIdElement().toVersionless().getValue()).setResource(sourceOrganization));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceOrganizationReference.getReference()).setResource(sourceOrganization));
 		
 		if (sourceEndpoint != null && !sourceEndpoint.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceEndpoint.getIdElement().toVersionless().getValue()).setResource(sourceEndpoint));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceEnpointReference.getReference()).setResource(sourceEndpoint));
 		}
 	
-		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetPractitionerRole.getIdElement().toVersionless().getValue()).setResource(targetPractitionerRole));
+		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetPractitionerRole.fhirType()+"/"+targetPractitionerRole.getIdPart()).setResource(targetPractitionerRole));
 		if (targetPractitioner != null && !targetPractitioner.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetPractitioner.getIdElement().toVersionless().getValue()).setResource(targetPractitioner));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetPractitioner.fhirType()+"/"+targetPractitioner.getIdPart()).setResource(targetPractitioner));
 		}
 		if (targetOrganization != null && !targetOrganization.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetOrganization.getIdElement().toVersionless().getValue()).setResource(targetOrganization));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetOrganizationReference.getReference()).setResource(targetOrganization));
 		}
 
 		if (targetEndpoint != null && !targetEndpoint.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetEndpoint.getIdElement().toVersionless().getValue()).setResource(targetEndpoint));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetEndpointReference.getReference()).setResource(targetEndpoint));
 		}
 
 		if (targetHealthService != null && !targetHealthService.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetHealthService.getIdElement().toVersionless().getValue()).setResource(targetHealthService));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetHealthService.fhirType()+"/"+targetHealthService.getIdPart()).setResource(targetHealthService));
 		}
 
 		// Add all the supporting resources to MessageBundle entry as specified in
@@ -1380,7 +1389,7 @@ public class ServerOperations {
 		if (theCoverage != null) {
 			BSERCoverage coverage = new BSERCoverage();
 			theCoverage.copyValues(coverage);
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(coverage.getIdElement().toVersionless().getValue()).setResource(coverage));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(coverage.fhirType()+"/"+coverage.getIdPart()).setResource(coverage));
 		}
 
 		// Submit to target $process-message operation
