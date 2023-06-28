@@ -21,6 +21,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -573,7 +574,7 @@ public class ServerOperations {
 				requesterReference.getReferenceElement().getBaseUrl(), 
 				PractitionerRole.class, 
 				PractitionerRole.RES_ID.exactly().code(sourcePractitioner.getIdElement().getIdPart()),
-				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT);
+				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT, PractitionerRole.INCLUDE_PRACTITIONER);
 		}
 
 		PractitionerRole sourceEhrPractitionerRole = null;
@@ -622,7 +623,6 @@ public class ServerOperations {
 			bserEndpointProcessMessageUrl = bserEndpointUrl+"/$process-message";
 		}
 
-		Reference sourceEnpointReference = null;
 		if (sourceEndpoint == null || sourceEndpoint.isEmpty()) {
 			sourceEndpoint = new Endpoint();
 			sourceEndpoint.setStatus(EndpointStatus.ACTIVE);
@@ -630,10 +630,16 @@ public class ServerOperations {
 			sourceEndpoint.addPayloadType(new CodeableConcept().setText("BSeR Referral Request Message"));
 			sourceEndpoint.setAddress(bserEndpointProcessMessageUrl);
 			sourceEndpoint.setId(new IdType(sourceEndpoint.fhirType(), UUID.randomUUID().toString()));
-			sourceEnpointReference = new Reference(sourceEndpoint.fhirType() + "/" + sourceEndpoint.getIdPart());
-			sourcePractitionerRole.addEndpoint(sourceEnpointReference);
 		}
 
+		saveResource(sourceEndpoint);
+		Reference sourceEndpointReference = new Reference(sourceEndpoint.fhirType() + "/" + sourceEndpoint.getIdPart());
+		sourcePractitionerRole.setEndpoint(new ArrayList<Reference>(Arrays.asList(sourceEndpointReference)));
+
+		saveResource(sourcePractitioner);
+		Reference sourcePractitionerReference = new Reference(sourcePractitioner.fhirType() + "/" + sourcePractitioner.getIdPart());
+		sourcePractitionerRole.setPractitioner(sourcePractitionerReference);
+		
 		saveResource(sourcePractitionerRole);
 		sourceReference = new Reference(sourcePractitionerRole.fhirType() + "/" + sourcePractitionerRole.getIdPart());
 
@@ -1277,7 +1283,7 @@ public class ServerOperations {
 
 		serviceRequest.setOccurrence(new DateTimeType(new Date()));
 
-		updateResource(serviceRequest);
+		saveResource(serviceRequest);
 		Reference serviceRequestReference = new Reference(serviceRequest.fhirType() + "/" + serviceRequest.getIdPart());
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
 			identifierSystem, uniqueIdentifierValue,
@@ -1350,7 +1356,7 @@ public class ServerOperations {
 			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceOrganizationReference.getReference()).setResource(sourceOrganization));
 		
 		if (sourceEndpoint != null && !sourceEndpoint.isEmpty()) {
-			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceEnpointReference.getReference()).setResource(sourceEndpoint));
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceEndpointReference.getReference()).setResource(sourceEndpoint));
 		}
 	
 		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetPractitionerRole.fhirType()+"/"+targetPractitionerRole.getIdPart()).setResource(targetPractitionerRole));
