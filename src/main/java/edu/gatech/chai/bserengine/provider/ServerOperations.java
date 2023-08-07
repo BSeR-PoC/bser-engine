@@ -42,6 +42,7 @@ import org.hl7.fhir.r4.model.HealthcareService;
 import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.IdType;
 import org.hl7.fhir.r4.model.Identifier;
+import org.hl7.fhir.r4.model.Location;
 import org.hl7.fhir.r4.model.MedicationStatement;
 import org.hl7.fhir.r4.model.MessageHeader;
 import org.hl7.fhir.r4.model.Meta;
@@ -563,22 +564,23 @@ public class ServerOperations {
 		Bundle searchBundle;
 		if ("Practitioner".equals(requesterReference.getType())) {
 			searchBundle = searchResourceFromFhirServer(
-				// requesterReference may be Practitioner. Ok to use this URL as both practitioner and practitionerRole hasve the same base URL
+				// requesterReference may be Practitioner. Ok to use this URL as both practitioner and practitionerRole have the same base URL
 				requesterReference.getReferenceElement().getBaseUrl(), 
 				PractitionerRole.class, 
 				PractitionerRole.PRACTITIONER.hasId(sourcePractitioner.getIdElement().getIdPart()),
-				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT);
+				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT, PractitionerRole.INCLUDE_LOCATION);
 		} else {
 			searchBundle = searchResourceFromFhirServer(
-				// requesterReference may be Practitioner. Ok to use this URL as both practitioner and practitionerRole hasve the same base URL
+				// requesterReference may be Practitioner. Ok to use this URL as both practitioner and practitionerRole have the same base URL
 				requesterReference.getReferenceElement().getBaseUrl(), 
 				PractitionerRole.class, 
-				PractitionerRole.RES_ID.exactly().code(sourcePractitioner.getIdElement().getIdPart()),
-				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT, PractitionerRole.INCLUDE_PRACTITIONER);
+				PractitionerRole.RES_ID.exactly().code(requesterReference.getReferenceElement().getIdPart()),
+				PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT, PractitionerRole.INCLUDE_PRACTITIONER, PractitionerRole.INCLUDE_LOCATION);
 		}
 
 		PractitionerRole sourceEhrPractitionerRole = null;
 		Organization sourceEhrOrganization = null;
+		Location sourceLocation = null;
 		for (BundleEntryComponent entry : searchBundle.getEntry()) {
 			Resource resource = entry.getResource();
 			if (resource instanceof PractitionerRole) {
@@ -587,6 +589,8 @@ public class ServerOperations {
 				sourceEhrOrganization = (Organization) resource;
 			} else if (resource instanceof Endpoint) {
 				sourceEndpoint = (Endpoint) resource;
+			} else if (resource instanceof Location) {
+				sourceLocation = (Location) resource;
 			}
 		}
 
@@ -656,10 +660,11 @@ public class ServerOperations {
 			targetReference.getReferenceElement().getBaseUrl(), 
 			PractitionerRole.class, 
 			PractitionerRole.RES_ID.exactly().code(targetReference.getReferenceElement().getIdPart()),
-			PractitionerRole.INCLUDE_PRACTITIONER, PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT, PractitionerRole.INCLUDE_SERVICE);
+			PractitionerRole.INCLUDE_PRACTITIONER, PractitionerRole.INCLUDE_ORGANIZATION, PractitionerRole.INCLUDE_ENDPOINT, PractitionerRole.INCLUDE_SERVICE, PractitionerRole.INCLUDE_LOCATION);
 
 		PractitionerRole targetEhrPractitionerRole = null;
 		Organization targetEhrOrganization = null;
+		Location targetLocation = null;
 		for (BundleEntryComponent entry : searchBundle.getEntry()) {
 			Resource resource = entry.getResource();
 			if (resource instanceof PractitionerRole) {
@@ -672,6 +677,8 @@ public class ServerOperations {
 				targetEndpoint = (Endpoint) resource;
 			} else if (resource instanceof HealthcareService) {
 				targetHealthService = (HealthcareService) resource;
+			} else if (resource instanceof Location) {
+				targetLocation = (Location) resource;
 			}
 		}
 
@@ -1358,6 +1365,11 @@ public class ServerOperations {
 		if (sourceEndpoint != null && !sourceEndpoint.isEmpty()) {
 			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceEndpointReference.getReference()).setResource(sourceEndpoint));
 		}
+
+		if (sourceLocation != null && !sourceLocation.isEmpty()) {
+			Reference sourceLocationReference = new Reference(sourceLocation.fhirType() + "/" + sourceLocation.getIdPart());
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(sourceLocationReference.getReference()).setResource(sourceLocation));
+		}
 	
 		messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetPractitionerRole.fhirType()+"/"+targetPractitionerRole.getIdPart()).setResource(targetPractitionerRole));
 		if (targetPractitioner != null && !targetPractitioner.isEmpty()) {
@@ -1373,6 +1385,11 @@ public class ServerOperations {
 
 		if (targetHealthService != null && !targetHealthService.isEmpty()) {
 			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetHealthService.fhirType()+"/"+targetHealthService.getIdPart()).setResource(targetHealthService));
+		}
+
+		if (targetLocation != null && !targetLocation.isEmpty()) {
+			Reference targetLocationReference = new Reference(targetLocation.fhirType() + "/" + targetLocation.getIdPart());
+			messageBundle.addEntry(new BundleEntryComponent().setFullUrl(targetLocationReference.getReference()).setResource(targetLocation));
 		}
 
 		// Add all the supporting resources to MessageBundle entry as specified in
