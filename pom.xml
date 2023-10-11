@@ -32,7 +32,7 @@
 
 	<properties>
 		<hapi_stable_version>6.4.1</hapi_stable_version>
-		<bser_library_version>0.2.0-STU1</bser_library_version>
+		<bser_library_version>0.2.1-STU1</bser_library_version>
 		<smartonfhir-helper-version>0.0.3</smartonfhir-helper-version>
 
 		<!-- configure timestamp in MANIFEST.MF for maven-war-provider -->

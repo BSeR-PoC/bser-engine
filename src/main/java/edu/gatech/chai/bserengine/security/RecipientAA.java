@@ -9,6 +9,7 @@ import org.json.simple.parser.ParseException;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -193,13 +194,19 @@ public class RecipientAA {
             responseEntity = restTemplate.exchange(targetUrl, HttpMethod.POST, requestEntity, String.class);
         } catch (Exception e) {
             logger.error("Submission to YUSA falied with " + e.getMessage());
-            return "FAILED to submit: " + e.getMessage();
+            return "FAILED: with an exception - " + e.getMessage();
         }
 
         if (!responseEntity.getStatusCode().is2xxSuccessful()) {
             throw new FHIRException("Failed to submit Referral Request - , " + responseEntity.getStatusCode());
         }
 
-        return responseEntity.getBody();
+        String retString;
+        if (HttpStatus.ACCEPTED == responseEntity.getStatusCode()) {
+            retString = "ACCEPTED: ";
+        } else {
+            retString = "COMPLETED: ";
+        }
+        return retString+responseEntity.getBody();
     }
 } 
