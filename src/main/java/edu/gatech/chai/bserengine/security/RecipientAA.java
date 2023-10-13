@@ -207,6 +207,6 @@ public class RecipientAA {
         } else {
             retString = "COMPLETED: ";
         }
-        return retString+responseEntity.getBody();
+        return retString + "(" + responseEntity.getStatusCode() + ")" + responseEntity.getBody()==null?"":responseEntity.getBody();
     }
 } 
