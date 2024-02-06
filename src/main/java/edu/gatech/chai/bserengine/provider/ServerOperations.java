@@ -1778,7 +1778,7 @@ public class ServerOperations {
 					for (BundleEntryComponent entry : entries) {
 						resource = entry.getResource();
 						if (resource instanceof Task) {
-							if (entry.getFullUrl().contains(referralTaskReference.getId())) {
+							if (entry.getFullUrl().contains(referralTaskReference.getReferenceElement().getValue())) {
 								bserReferralTask = new BSERReferralTask();
 								((Task) entry.getResource()).copyValues(bserReferralTask);
 								break;
@@ -1787,65 +1787,94 @@ public class ServerOperations {
 						} 						
 					}
 
-					if (bserReferralTask == null || !bserReferralTask.isEmpty()) {
+					if (bserReferralTask == null || bserReferralTask.isEmpty()) {
 						throw new FHIRException("BSERReferralTask cannot be found from the MessageBundle entries.");
 					}
 
-					TaskOutputComponent outputFromRecipient = bserReferralTask.getOutputFirstRep();
-					if (outputFromRecipient == null || outputFromRecipient.isEmpty()) {
-						throw new FHIRFormatError("BSERReferralTask.output is null or Empty");
-					} 
-
-					Reference bserFeedbackDocumentReference = (Reference) outputFromRecipient.getValue();
-					if (bserFeedbackDocumentReference == null || bserFeedbackDocumentReference.isEmpty()) {
-						throw new FHIRException("BSERReferralTask.output.valueReference cannot be null or empty.");
-					}
-					BSERReferralFeedbackDocument bserReferralFeedbackDocument = null;
-					for (BundleEntryComponent entry : entries) {
-						resource = entry.getResource();
-						if (resource instanceof Bundle) {
-							if (entry.getFullUrl().contains(bserFeedbackDocumentReference.getId())) {
-								bserReferralFeedbackDocument = new BSERReferralFeedbackDocument();
-								((Bundle) entry.getResource()).copyValues(bserReferralFeedbackDocument);
-								break;
+					// Get and Update Business Status in the Task in the FHIR Store
+					// Get PLAC identifier.value.
+					String PLACvalue = null;
+					for (Identifier taskIdentifier : bserReferralTask.getIdentifier()) {
+						CodeableConcept type = taskIdentifier.getType();
+						for (Coding coding : type.getCoding()) {
+							if ("http://terminology.hl7.org/CodeSystem/v2-0203".equals(coding.getSystem())
+								&& "PLAC".equals(coding.getCode())) {
+									PLACvalue = taskIdentifier.getValue();
+									break;
 							}
-						} 
-					}
+						}
 
-					if (bserReferralFeedbackDocument == null || bserReferralFeedbackDocument.isEmpty()) {
-						throw new FHIRException("BSERReferralTask.output.valueReference cannot be found in the entry resources.");
-					}
-
-					saveResource(bserReferralFeedbackDocument);
-
-					BSERReferralTask bserReferralTaskFromFhirStore = (BSERReferralTask) pullResourceFromFhirServer(referralTaskReference);
-					bserReferralTask.copyValues(bserReferralTaskFromFhirStore);
-
-					// We just stored BSER Referral Feedback Document. Relink this
-					bserReferralTaskFromFhirStore.getOutputFirstRep().setValue(new Reference(bserReferralFeedbackDocument.getIdElement()));
-					updateResource(bserReferralTaskFromFhirStore);
-
-					// We also need to update ServiceRequest
-					Reference serviceRequestReference = bserReferralTaskFromFhirStore.getFocus();
-					BSERReferralServiceRequest referralServiceRequestInFeedback = null;
-					for (BundleEntryComponent entry : entries) {
-						resource = entry.getResource();
-						if (resource instanceof ServiceRequest) {
-							if (entry.getFullUrl().contains(serviceRequestReference.getId())) {
-								referralServiceRequestInFeedback = (BSERReferralServiceRequest) resource;
-							}
+						if (PLACvalue != null && !PLACvalue.isEmpty()) {
+							break;
 						}
 					}
 
-					if (referralServiceRequestInFeedback == null || referralServiceRequestInFeedback.isEmpty()) {
-						throw new FHIRException("Referral ServiceRequest is empty or does not exit.");
+					if (PLACvalue == null || PLACvalue.isEmpty()) {
+						throw new FHIRException("BSERReferralTask must have PLAC's value.");
 					}
 
-					// Now obtain the ServiceRequest from fhirStore.
-					BSERReferralServiceRequest bserReferralServiceRequestFromFhirStore = (BSERReferralServiceRequest) pullResourceFromFhirServer(serviceRequestReference);
-					referralServiceRequestInFeedback.copyValues(bserReferralServiceRequestFromFhirStore);
+					CodeableConcept businessStatus = bserReferralTask.getBusinessStatus();
 
-					updateResource(bserReferralServiceRequestFromFhirStore);
+					Bundle searchBundle = searchResourceFromFhirServer(
+						fhirStore, 
+						Task.class, 
+						Task.IDENTIFIER.exactly().code(PLACvalue),
+						Task.INCLUDE_SUBJECT);
+		
+					if (searchBundle.getTotal() == 0) {
+						throw new FHIRException("NO Matching Task Found.");
+					} 
+
+					// loop through the search result entry and get task and patient
+					Patient myPatient = null;
+					Task myTask = null;
+					for (BundleEntryComponent TaskEntry : searchBundle.getEntry()) {
+						if (TaskEntry.getResource() instanceof Task) {
+							myTask = (Task) TaskEntry.getResource();
+						} else if (TaskEntry.getResource() instanceof Patient) {
+							myPatient = (Patient) TaskEntry.getResource();
+						}
+					}
+
+					if (myTask == null) {
+						throw new FHIRException("No task found in the search.entry");
+					}
+
+					if (myPatient == null || myPatient.isEmpty()) {
+						logger.error("Searched Task (" + myTask.getIdPart() +") has no subject as patient");
+					}
+
+					// Get the business status from recipient bserReferralStatus and update the task.
+					myTask.setBusinessStatus(businessStatus);
+					updateResource(myTask);
+
+					// See if we have something in the output
+					TaskOutputComponent outputFromRecipient = bserReferralTask.getOutputFirstRep();
+					BSERReferralFeedbackDocument bserReferralFeedbackDocument = null;
+
+					if (outputFromRecipient != null && !outputFromRecipient.isEmpty()) {
+						Reference bserFeedbackDocumentReference = (Reference) outputFromRecipient.getValue();
+						if (bserFeedbackDocumentReference == null || bserFeedbackDocumentReference.isEmpty()) {
+							throw new FHIRException("BSERReferralTask.output.valueReference cannot be null or empty.");
+						}
+						
+						for (BundleEntryComponent entry : entries) {
+							resource = entry.getResource();
+							if (resource instanceof Bundle) {
+								if (entry.getFullUrl().contains(bserFeedbackDocumentReference.getReferenceElement().getValue())) {
+									bserReferralFeedbackDocument = new BSERReferralFeedbackDocument();
+									((Bundle) entry.getResource()).copyValues(bserReferralFeedbackDocument);
+									break;
+								}
+							} 
+						}
+
+						if (bserReferralFeedbackDocument == null || bserReferralFeedbackDocument.isEmpty()) {
+							throw new FHIRException("BSERReferralTask.output.valueReference cannot be found in the entry resources.");
+						}
+
+						saveResource(bserReferralFeedbackDocument);
+					}
 				}
 				
 				saveResource(theContent);
