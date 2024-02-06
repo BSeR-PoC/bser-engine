@@ -182,7 +182,7 @@ public class RecipientAA {
             headers.setBearerAuth(myAccessToken);
         } else {
             logger.error("Failed to get access token.");
-            throw new FHIRException("Failed to getAccessToken.");
+            return "Failed to getAccessToken";
         }
 
         logger.debug("Sending to YUSA (" + targetUrl + ") with AccessToken: " + myAccessToken);
@@ -198,7 +198,7 @@ public class RecipientAA {
         }
 
         if (!responseEntity.getStatusCode().is2xxSuccessful()) {
-            throw new FHIRException("Failed to submit Referral Request - , " + responseEntity.getStatusCode());
+            return "FAILED to submit Referral Request - , " + responseEntity.getStatusCode();
         }
 
         String retString;
