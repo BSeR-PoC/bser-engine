@@ -1319,9 +1319,9 @@ public class ServerOperations {
 		Reference targetOrganizationReference = (targetOrganization == null || targetOrganization.isEmpty())?null:new Reference(targetOrganization.fhirType()+"/"+targetOrganization.getIdPart());
 
 		// Set the recipient identifier. This is an optional. If we have organization information, set this identifier.
-		if (targetOrganizationReference != null && !targetOrganizationReference.isEmpty()) {
-			serviceRequest.setRecipientIdentifier(identifierSystem, uniqueIdentifierValue, targetOrganizationReference);
-		}
+		// if (targetOrganizationReference != null && !targetOrganizationReference.isEmpty()) {
+		// 	serviceRequest.setRecipientIdentifier(identifierSystem, uniqueIdentifierValue, targetOrganizationReference);
+		// }
 
 		serviceRequest.setOccurrence(new DateTimeType(new Date()));
 
@@ -1329,7 +1329,7 @@ public class ServerOperations {
 		Reference serviceRequestReference = new Reference(serviceRequest.fhirType() + "/" + serviceRequest.getIdPart());
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
 			identifierSystem, uniqueIdentifierValue,
-			identifierSystem, uniqueIdentifierValue,
+			null, null,
 			sourceOrganizationReference, 
 			targetOrganizationReference,
 			TaskStatus.REQUESTED, 
@@ -1477,14 +1477,19 @@ public class ServerOperations {
 					}
 
 					if (respYusa.startsWith("ACCEPTED")) {
-						bserReferralTask.setStatus(TaskStatus.ACCEPTED);
-					} else if (respYusa.startsWith("COMPLETED")) {
-						bserReferralTask.setStatus(TaskStatus.COMPLETED);
+						bserReferralTask.setStatus(TaskStatus.REQUESTED);
+					} else if (respYusa.startsWith("SUCCESS")) {
+						bserReferralTask.setStatus(TaskStatus.REQUESTED);
 					} else {
 						bserReferralTask.setStatus(TaskStatus.FAILED);
+					}					
+				} else if ("NO-SUBMISSION".equals(recipientAA.getRecipientSite())) {
+					bserReferralTask.setStatus(TaskStatus.REQUESTED);
+					if (!warningMessage.isBlank()) {
+						warningMessage = warningMessage.concat(" Submission is disabled.\n");
+					} else {
+						warningMessage = warningMessage.concat("Submission is disabled.\n");
 					}
-					
-					updateResource(bserReferralTask);
 				} else {
 					String accessToken = null;
 					try {
@@ -1505,6 +1510,12 @@ public class ServerOperations {
 						.setMessageBundle(messageBundle)
 						.asynchronous(OperationOutcome.class)
 						.execute();	
+
+					if (!warningMessage.isBlank()) {
+						warningMessage = warningMessage.concat(" Submitted to " + targetEndpointUrl + "\n");
+					} else {
+						warningMessage = warningMessage.concat("Submitted to " + targetEndpointUrl + "\n");
+					}	
 				}
 
 				if (response != null && !response.isEmpty()) {
@@ -1524,15 +1535,20 @@ public class ServerOperations {
 						setTaskOut(bserReferralTask, retOO);
 
 						if (errorOccurred) {
+							updateResource(bserReferralTask);
 							throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
 						}
 
-						bserReferralTask.setStatus(TaskStatus.ACCEPTED);
+						bserReferralTask.setStatus(TaskStatus.REQUESTED);
 					} else {
 						logger.warn("Message has a resource payload: " + response.fhirType());
 					}
-				} 
+				}
 
+				updateResource(bserReferralTask);
+
+				serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
+				updateResource(serviceRequest);
 			}
 		} else {
 			if (!warningMessage.isBlank())

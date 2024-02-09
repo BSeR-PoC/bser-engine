@@ -205,7 +205,7 @@ public class RecipientAA {
         if (HttpStatus.ACCEPTED == responseEntity.getStatusCode()) {
             retString = "ACCEPTED: ";
         } else {
-            retString = "COMPLETED: ";
+            retString = "SUCCESS: ";
         }
         return retString + "(" + responseEntity.getStatusCode() + ")" + responseEntity.getBody()==null?"":responseEntity.getBody();
     }
