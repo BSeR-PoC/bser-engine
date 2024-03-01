@@ -33,6 +33,7 @@ import org.hl7.fhir.r4.model.CanonicalType;
 import org.hl7.fhir.r4.model.CodeType;
 import org.hl7.fhir.r4.model.CodeableConcept;
 import org.hl7.fhir.r4.model.Coding;
+import org.hl7.fhir.r4.model.Composition;
 import org.hl7.fhir.r4.model.Condition;
 import org.hl7.fhir.r4.model.Coverage;
 import org.hl7.fhir.r4.model.DateTimeType;
@@ -43,6 +44,7 @@ import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.IdType;
 import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Location;
+import org.hl7.fhir.r4.model.Medication;
 import org.hl7.fhir.r4.model.MedicationStatement;
 import org.hl7.fhir.r4.model.MessageHeader;
 import org.hl7.fhir.r4.model.Meta;
@@ -108,6 +110,7 @@ import ca.uhn.fhir.rest.client.api.ServerValidationModeEnum;
 import ca.uhn.fhir.rest.client.interceptor.BearerTokenAuthInterceptor;
 import ca.uhn.fhir.rest.gclient.ICriterion;
 import ca.uhn.fhir.rest.gclient.IQuery;
+import ca.uhn.fhir.rest.gclient.TokenClientParam;
 import ca.uhn.fhir.rest.server.exceptions.InternalErrorException;
 import edu.gatech.chai.BSER.model.BSERCoverage;
 import edu.gatech.chai.BSER.model.BSERDiagnosis;
@@ -425,6 +428,36 @@ public class ServerOperations {
 		return true;
 	}
 
+	Patient searchPatientFromFhirStore(Patient patient) {
+		Patient patientFound = null;
+
+		for (Identifier patientIdentifier : patient.getIdentifier()) {
+			String system = patientIdentifier.getSystem();
+			String code = patientIdentifier.getValue();
+			ICriterion<TokenClientParam> criteria;
+			if (system != null && !system.isBlank()) {
+				criteria = Patient.IDENTIFIER.exactly().systemAndCode(system, code);
+			} else {
+				criteria = Patient.IDENTIFIER.exactly().code(code);
+			}
+
+			Bundle searchBundle = searchResourceFromFhirServer(
+				fhirStore, 
+				Patient.class, 
+				criteria);
+			
+			if (searchBundle != null && !searchBundle.isEmpty()) {
+				List<BundleEntryComponent> searchBundleEntry = searchBundle.getEntry();
+				if (searchBundleEntry.size() > 0) {
+					patientFound = (Patient) searchBundle.getEntryFirstRep().getResource();
+					break;
+				}
+			}
+		}
+
+		return patientFound;
+	}
+
 	/***
 	 * processReferral - processes the Referral Request.
 	 * @param theServiceRequest
@@ -565,7 +598,12 @@ public class ServerOperations {
 		}
 
 		// Save this patient and rewrite the subject to serviceRequest.
-		saveResource(thePatient);
+		Patient patientExt = searchPatientFromFhirStore(thePatient);
+		if (patientExt == null) {
+			saveResource(thePatient);
+		} else {
+			thePatient = patientExt;
+		}
 
 		String subjectName = thePatient.getNameFirstRep().getGivenAsSingleString() + " " + thePatient.getNameFirstRep().getFamily();
 		subjectReference = new Reference("Patient" + "/" + thePatient.getIdPart()).setDisplay(subjectName);
@@ -1857,7 +1895,7 @@ public class ServerOperations {
 					}
 
 					if (myPatient == null || myPatient.isEmpty()) {
-						logger.error("Searched Task (" + myTask.getIdPart() +") has no subject as patient");
+						throw new FHIRException("Searched Task (" + myTask.getIdPart() +") has no subject as patient");
 					}
 
 					// Get the business status from recipient bserReferralStatus and update the task.
@@ -1865,31 +1903,59 @@ public class ServerOperations {
 					updateResource(myTask);
 
 					// See if we have something in the output
-					TaskOutputComponent outputFromRecipient = bserReferralTask.getOutputFirstRep();
-					BSERReferralFeedbackDocument bserReferralFeedbackDocument = null;
-
-					if (outputFromRecipient != null && !outputFromRecipient.isEmpty()) {
+					for (TaskOutputComponent outputFromRecipient : bserReferralTask.getOutput()) {
 						Reference bserFeedbackDocumentReference = (Reference) outputFromRecipient.getValue();
 						if (bserFeedbackDocumentReference == null || bserFeedbackDocumentReference.isEmpty()) {
 							throw new FHIRException("BSERReferralTask.output.valueReference cannot be null or empty.");
 						}
-						
+
+						// From message entries, find out the actual resource of bser feedback document reference.
 						for (BundleEntryComponent entry : entries) {
 							resource = entry.getResource();
 							if (resource instanceof Bundle) {
 								if (entry.getFullUrl().contains(bserFeedbackDocumentReference.getReferenceElement().getValue())) {
-									bserReferralFeedbackDocument = new BSERReferralFeedbackDocument();
+									// This bundle document has patient data entries for the usecase.
+									Bundle bserFeedbackDocument = (Bundle) entry.getResource();
+									
+									// From ths document, grab composition.
+									Composition bserFeedbackDocComposition = (Composition) bserFeedbackDocument.getEntryFirstRep().getResource();
+									for (SectionComponent section : bserFeedbackDocComposition.getSection()) {
+										for (Reference fbEntry : section.getEntry()) {
+											// Find this reference from the document entry.
+											for (BundleEntryComponent bserDocEntry : bserFeedbackDocument.getEntry()) {
+												if (bserDocEntry.getFullUrl().contains(fbEntry.getReferenceElement().getValue())) {
+													Resource supportResource = bserDocEntry.getResource();
+
+													// substitute the patient
+													if (supportResource instanceof Observation) {
+														String supportResourceSubjectRef = myPatient.getIdElement().toVersionless().getId();
+														((Observation)supportResource).setSubject(new Reference(supportResourceSubjectRef));
+														saveResource(supportResource);
+
+														fbEntry.setReference(supportResource.getIdElement().toVersionless().getId());
+													} else if (supportResource instanceof Medication) {
+														saveResource(supportResource);
+														
+														fbEntry.setReference(supportResource.getIdElement().toVersionless().getId());
+													}
+												}
+											}
+										}
+									}
+
+									BSERReferralFeedbackDocument bserReferralFeedbackDocument = new BSERReferralFeedbackDocument();
+
+									// We have the document. This 
 									((Bundle) entry.getResource()).copyValues(bserReferralFeedbackDocument);
+									
+									saveResource(bserReferralFeedbackDocument);
+									saveResource(bserFeedbackDocComposition);
+									
 									break;
 								}
 							} 
 						}
 
-						if (bserReferralFeedbackDocument == null || bserReferralFeedbackDocument.isEmpty()) {
-							throw new FHIRException("BSERReferralTask.output.valueReference cannot be found in the entry resources.");
-						}
-
-						saveResource(bserReferralFeedbackDocument);
 					}
 				}
 				
