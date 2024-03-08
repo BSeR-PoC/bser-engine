@@ -1301,8 +1301,10 @@ public class ServerOperations {
 		);
 
 		// Adding composition
-		bserReferralRequestComposition.setId(new IdType(bserReferralRequestComposition.fhirType(), UUID.randomUUID().toString()));
+		// bserReferralRequestComposition.setId(new IdType(bserReferralRequestComposition.fhirType(), UUID.randomUUID().toString()));
+		saveResource(bserReferralRequestComposition);
 		BSERReferralRequestDocumentBundle bserReferralRequestDocumentBundle = new BSERReferralRequestDocumentBundle(bserReferralRequestComposition);
+		
 		bserReferralRequestDocumentBundle.setTimestamp(new Date());
 
 		// Adding supporting information document for ServiceRequest
@@ -1339,6 +1341,7 @@ public class ServerOperations {
 		identifier.setSystem("urn:bser:request:document");
 		identifier.setValue(UUID.randomUUID().toString());
 		bserReferralRequestDocumentBundle.setIdentifier(identifier);
+		saveResource(bserReferralRequestDocumentBundle);
 		Reference bserReferralRequestDocumentBundleReference = new Reference(bserReferralRequestDocumentBundle.fhirType() + "/" + bserReferralRequestDocumentBundle.getIdPart());
 
 		serviceRequest.addSupportingInfo(bserReferralRequestDocumentBundleReference);		
