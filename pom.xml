@@ -16,7 +16,7 @@
 	<groupId>edu.gatech.chai</groupId>
 	<artifactId>bser-engine</artifactId>
 	<packaging>war</packaging>
-	<version>0.3.3</version>
+	<version>0.3.4</version>
 
 	<name>BSeR Engine Server</name>
 
@@ -32,7 +32,7 @@
 
 	<properties>
 		<hapi_stable_version>6.8.2</hapi_stable_version>
-		<bser_library_version>0.2.3-STU1</bser_library_version>
+		<bser_library_version>0.2.4</bser_library_version>
 		<smartonfhir-helper-version>0.0.3</smartonfhir-helper-version>
 
 		<!-- configure timestamp in MANIFEST.MF for maven-war-provider -->

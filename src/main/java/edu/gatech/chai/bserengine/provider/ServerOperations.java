@@ -134,11 +134,13 @@ import edu.gatech.chai.BSER.model.ODHEmploymentStatus;
 import edu.gatech.chai.BSER.model.util.BSEREarlyChildhoodNutritionObservationUtil;
 import edu.gatech.chai.BSER.model.util.BSERNRTAuthorizationStatusUtil;
 import edu.gatech.chai.BSER.model.util.BSeRTelcomCommunicationPreferencesUtil;
+import edu.gatech.chai.BSER.model.util.CommonUtil;
 import edu.gatech.chai.SmartOnFhirClient.SmartBackendServices;
 import edu.gatech.chai.USCore.model.USCoreBloodPressure;
 import edu.gatech.chai.USCore.model.USCoreBodyHeight;
 import edu.gatech.chai.USCore.model.USCoreBMI;
 import edu.gatech.chai.USCore.model.USCoreBodyWeight;
+import edu.gatech.chai.USCore.model.USCoreConditionProblemsAndHealthConcerns;
 import edu.gatech.chai.USCore.model.USCoreSmokingStatusObservation;
 import edu.gatech.chai.USCore.model.util.USCoreSmokingStatusObservationUtil;
 import edu.gatech.chai.USCore.model.USCoreAllergyIntolerance;
@@ -1129,7 +1131,8 @@ public class ServerOperations {
 		List<Reference> diagnosisConditionReferences = new ArrayList<Reference>();
 		if (theDiagnosis != null) {
 			for (ParametersParameterComponent diagnosis : theDiagnosis) {
-				BSERDiagnosis diagnosisCondition = new BSERDiagnosis();
+				USCoreConditionProblemsAndHealthConcerns diagnosisCondition = new USCoreConditionProblemsAndHealthConcerns();
+				diagnosisCondition.addCategory(CommonUtil.problemListItemCategory());
 				Type diagnosisValue = diagnosis.getValue();
 				if (diagnosisValue instanceof Reference) {
 					if (diagnosisValue.getIdElement() != null) {
