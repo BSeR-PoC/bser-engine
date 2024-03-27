@@ -207,6 +207,10 @@ public class RecipientAA {
         } else {
             retString = "SUCCESS: ";
         }
-        return retString + "(" + responseEntity.getStatusCode() + ")" + responseEntity.getBody()==null?"":responseEntity.getBody();
+
+        retString +=  "(" + responseEntity.getStatusCode() + ")" + (responseEntity.getBody()==null?"":responseEntity.getBody());
+        logger.debug(retString);
+
+        return retString;
     }
 } 

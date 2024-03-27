@@ -1581,8 +1581,12 @@ public class ServerOperations {
 
 				if (errorOccurred) {
 					bserReferralTask.setStatus(TaskStatus.FAILED);
+					OperationOutcome oo = constructErrorOO("Endpoint", "Submitting to " + targetEndpointUrl + " failed. " + warningMessage);
+					saveResource(oo);
+					setTaskOut(bserReferralTask, oo);
 					updateResource(bserReferralTask);
-					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed. Task.id:" + bserReferralTask.getId() + ". " + warningMessage);
+					
+					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed. Task.id:" + bserReferralTask.getIdElement().toVersionless() + " " + warningMessage);
 				} else {
 					if (response != null && !response.isEmpty()) {
 						if (response instanceof OperationOutcome) {
