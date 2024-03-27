@@ -1505,6 +1505,7 @@ public class ServerOperations {
 
 		if (recipientReady) {
 			IGenericClient client;
+			boolean errorOccurred = false;
 			if (targetEndpointUrl != null && !targetEndpointUrl.isBlank()) {
 				IParser parser = ctx.newJsonParser();
 				String messageBundleJson = parser.encodeResourceToString(messageBundle);
@@ -1539,6 +1540,11 @@ public class ServerOperations {
 					try {
 						accessToken = recipientAA.getAccessToken();
 					} catch (ParseException e) {
+						if (!warningMessage.isBlank()) {
+							warningMessage = warningMessage.concat(" Failed to get an access token: " + e.getMessage() + "\n");
+						} else {
+							warningMessage = warningMessage.concat("Failed to get an access token: " + e.getMessage() + "\n");
+						}
 						e.printStackTrace();
 					}
 
@@ -1548,51 +1554,73 @@ public class ServerOperations {
 						client.registerInterceptor(authInterceptor);
 					}
 
-					response = client
-						.operation()
-						.processMessage() // New operation for sending messages
-						.setMessageBundle(messageBundle)
-						.asynchronous(OperationOutcome.class)
-						.execute();	
+					try {
+						response = client
+							.operation()
+							.processMessage() // New operation for sending messages
+							.setMessageBundle(messageBundle)
+							.asynchronous(OperationOutcome.class)
+							.execute();	
+					} catch (Exception e) {
+						if (!warningMessage.isBlank()) {
+							warningMessage = warningMessage.concat(" Failed to send a request: " + e.getMessage() + "\n");
+						} else {
+							warningMessage = warningMessage.concat("Failed to send a request: " + e.getMessage() + "\n");
+						}
+
+						errorOccurred = true;
+						e.printStackTrace();
+					}
+
+					if (targetEndpointUrl.endsWith("/")) {
+						targetEndpointUrl += "$process-message";
+					} else {
+						targetEndpointUrl += "/$process-message";
+					}
+				}
+
+				if (errorOccurred) {
+					bserReferralTask.setStatus(TaskStatus.FAILED);
+					updateResource(bserReferralTask);
+					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed. Task.id:" + bserReferralTask.getId() + ". " + warningMessage);
+				} else {
+					if (response != null && !response.isEmpty()) {
+						if (response instanceof OperationOutcome) {
+							OperationOutcome retOO = (OperationOutcome) response;
+							for (OperationOutcomeIssueComponent issue : retOO.getIssue()) {
+								if (IssueSeverity.ERROR == issue.getSeverity() || IssueSeverity.FATAL == issue.getSeverity()) {
+									bserReferralTask.setStatus(TaskStatus.FAILED);
+									errorOccurred = true;
+
+									break;
+								}
+							}
+							
+							saveResource(retOO);
+							setTaskOut(bserReferralTask, retOO);
+
+							if (errorOccurred) {
+								updateResource(bserReferralTask);
+								throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
+							}
+
+							bserReferralTask.setStatus(TaskStatus.REQUESTED);
+						} else {
+							logger.warn("Message response has a resource other than operation outcome in the payload: " + response.fhirType());
+						}
+					}
+
+					updateResource(bserReferralTask);
+
+					serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
+					updateResource(serviceRequest);
 
 					if (!warningMessage.isBlank()) {
 						warningMessage = warningMessage.concat(" Submitted to " + targetEndpointUrl + "\n");
 					} else {
 						warningMessage = warningMessage.concat("Submitted to " + targetEndpointUrl + "\n");
-					}	
-				}
-
-				if (response != null && !response.isEmpty()) {
-					if (response instanceof OperationOutcome) {
-						OperationOutcome retOO = (OperationOutcome) response;
-						boolean errorOccurred = false;
-						for (OperationOutcomeIssueComponent issue : retOO.getIssue()) {
-							if (IssueSeverity.ERROR == issue.getSeverity() || IssueSeverity.FATAL == issue.getSeverity()) {
-								bserReferralTask.setStatus(TaskStatus.FAILED);
-								errorOccurred = true;
-
-								break;
-							}
-						}
-						
-						saveResource(retOO);
-						setTaskOut(bserReferralTask, retOO);
-
-						if (errorOccurred) {
-							updateResource(bserReferralTask);
-							throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed", (IBaseOperationOutcome) response);
-						}
-
-						bserReferralTask.setStatus(TaskStatus.REQUESTED);
-					} else {
-						logger.warn("Message has a resource payload: " + response.fhirType());
 					}
 				}
-
-				updateResource(bserReferralTask);
-
-				serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
-				updateResource(serviceRequest);
 			}
 		} else {
 			if (!warningMessage.isBlank())
