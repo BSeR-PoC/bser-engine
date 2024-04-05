@@ -95,6 +95,7 @@ import org.hl7.fhir.r4.model.UrlType;
 import org.apache.commons.text.StringEscapeUtils;
 import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.exceptions.FHIRFormatError;
+import org.hl7.fhir.instance.model.api.IAnyResource;
 import org.hl7.fhir.instance.model.api.IBaseBundle;
 import org.hl7.fhir.instance.model.api.IBaseOperationOutcome;
 import org.hl7.fhir.instance.model.api.IBaseResource;
@@ -1585,7 +1586,7 @@ public class ServerOperations {
 					saveResource(oo);
 					setTaskOut(bserReferralTask, oo);
 					updateResource(bserReferralTask);
-					
+
 					throw new InternalErrorException("Submitting to " + targetEndpointUrl + " failed. Task.id:" + bserReferralTask.getIdElement().toVersionless() + " " + warningMessage);
 				} else {
 					if (response != null && !response.isEmpty()) {
@@ -1676,7 +1677,7 @@ public class ServerOperations {
 	 * @return
 	 */
 	@Operation(name="$process-message", manualResponse = true)
-	public Bundle processMessageOperation(
+	public void processMessageOperation(
 		@OperationParam(name="content") Bundle theContent,
 		@OperationParam(name="async") BooleanType theAsync,
 		@OperationParam(name="response-url") UriType theUri			
@@ -1694,13 +1695,13 @@ public class ServerOperations {
 		// 	recipientEndpointUrl = theUri.asStringValue();
 		// }
 
-		Bundle retBundle = new Bundle();
+		// Bundle retBundle = new Bundle();
 
 		MessageHeader messageHeader = null;
 
 		Reference initiatorPractitionerRoleReference = null;
 
-		BSERReferralTask bserReferralTask = null;
+		Task bserReferralTask = null;
 		Reference referralTaskReference = null;
 
 		if (theContent == null || theContent.isEmpty()) {
@@ -1726,6 +1727,9 @@ public class ServerOperations {
 				if (!BSERReferralMessageHeader.isBSERReferralMessageHeader(messageHeader)) {
 					throw new FHIRException("Received message is NOT REF/RRI - Patient referral");
 				}
+
+				// save the orignial message bundle.
+				saveResource(theContent);
 
 				// This could be async message response. Check here.
 				MessageHeaderResponseComponent response = messageHeader.getResponse();
@@ -1844,7 +1848,7 @@ public class ServerOperations {
 					updateResource(serviceRequest);
 
 					// We do not respond to the response message.
-					return retBundle;
+					return;
 				} else {
 					// If this message is not a response. Then, this must be a feedback message.
 
@@ -1871,8 +1875,7 @@ public class ServerOperations {
 						resource = entry.getResource();
 						if (resource instanceof Task) {
 							if (entry.getFullUrl().contains(referralTaskReference.getReferenceElement().getValue())) {
-								bserReferralTask = new BSERReferralTask();
-								((Task) entry.getResource()).copyValues(bserReferralTask);
+								bserReferralTask = (Task) entry.getResource();
 								break;
 							}
 		
@@ -1938,7 +1941,6 @@ public class ServerOperations {
 
 					// Get the business status from recipient bserReferralStatus and update the task.
 					myTask.setBusinessStatus(businessStatus);
-					updateResource(myTask);
 
 					// See if we have something in the output
 					for (TaskOutputComponent outputFromRecipient : bserReferralTask.getOutput()) {
@@ -1953,52 +1955,51 @@ public class ServerOperations {
 							if (resource instanceof Bundle) {
 								if (entry.getFullUrl().contains(bserFeedbackDocumentReference.getReferenceElement().getValue())) {
 									// This bundle document has patient data entries for the usecase.
-									Bundle bserFeedbackDocument = (Bundle) entry.getResource();
-									
+									Bundle recvFeedbackDocument = (Bundle) entry.getResource();
+
+									// We have the document. This 
+									BSERReferralFeedbackDocument bserReferralFeedbackDocument = new BSERReferralFeedbackDocument();
+									recvFeedbackDocument.copyValues(bserReferralFeedbackDocument);
+
 									// From ths document, grab composition.
-									Composition bserFeedbackDocComposition = (Composition) bserFeedbackDocument.getEntryFirstRep().getResource();
-									for (SectionComponent section : bserFeedbackDocComposition.getSection()) {
-										for (Reference fbEntry : section.getEntry()) {
+									Composition bserReferralFeedbacDocComposition = (Composition) bserReferralFeedbackDocument.getEntryFirstRep().getResource();
+									for (SectionComponent section : bserReferralFeedbacDocComposition.getSection()) {
+										// run through the section.entry to capture the reference.
+										for (Reference sectionEntryReference : section.getEntry()) {
 											// Find this reference from the document entry.
-											for (BundleEntryComponent bserDocEntry : bserFeedbackDocument.getEntry()) {
-												if (bserDocEntry.getFullUrl().contains(fbEntry.getReferenceElement().getValue())) {
-													Resource supportResource = bserDocEntry.getResource();
+											for (BundleEntryComponent bserReferralFeedbackDocEntry : bserReferralFeedbackDocument.getEntry()) {
+												if (bserReferralFeedbackDocEntry.getFullUrl().contains(sectionEntryReference.getReferenceElement().getValue())) {
+													Resource supportInfoResource = bserReferralFeedbackDocEntry.getResource();
 
 													// substitute the patient
-													if (supportResource instanceof Observation) {
+													if (supportInfoResource instanceof Observation) {
 														String supportResourceSubjectRef = myPatient.getIdElement().toVersionless().getId();
-														((Observation)supportResource).setSubject(new Reference(supportResourceSubjectRef));
-														saveResource(supportResource);
-
-														fbEntry.setReference(supportResource.getIdElement().toVersionless().getId());
-													} else if (supportResource instanceof Medication) {
-														saveResource(supportResource);
-														
-														fbEntry.setReference(supportResource.getIdElement().toVersionless().getId());
-													}
+														((Observation)supportInfoResource).setSubject(new Reference(supportResourceSubjectRef));
+													} 
+													
+													saveResource(supportInfoResource);
+													// sectionEntryReference.setResource(supportInfoResource);
+													sectionEntryReference.setReferenceElement(supportInfoResource.getIdElement());
+													bserReferralFeedbackDocEntry.setFullUrl(supportInfoResource.getIdElement().toVersionless().getId());
 												}
 											}
 										}
 									}
 
-									BSERReferralFeedbackDocument bserReferralFeedbackDocument = new BSERReferralFeedbackDocument();
-
-									// We have the document. This 
-									((Bundle) entry.getResource()).copyValues(bserReferralFeedbackDocument);
 									
 									saveResource(bserReferralFeedbackDocument);
-									saveResource(bserFeedbackDocComposition);
-									
+									saveResource(bserReferralFeedbacDocComposition);
+									TaskOutputComponent myOutputFromRecipient = new TaskOutputComponent(outputFromRecipient.getType(), new Reference(bserReferralFeedbackDocument.getIdElement()));
+									myTask.addOutput(myOutputFromRecipient);
+
 									break;
 								}
 							} 
 						}
-
 					}
-				}
-				
-				saveResource(theContent);
 
+					updateResource(myTask);
+				}	
 			} else {
 				throw new FHIRFormatError("The bundle must have MessageHeader first in the entry");
 			}
@@ -2006,6 +2007,6 @@ public class ServerOperations {
 			throw new FHIRException("The bundle must be a MESSAGE type");
 		}
 		
-		return retBundle;
+		return;
 	}
 }
