@@ -16,7 +16,7 @@
 	<groupId>edu.gatech.chai</groupId>
 	<artifactId>bser-engine</artifactId>
 	<packaging>war</packaging>
-	<version>0.3.5</version>
+	<version>0.4.0</version>
 
 	<name>BSeR Engine Server</name>
 

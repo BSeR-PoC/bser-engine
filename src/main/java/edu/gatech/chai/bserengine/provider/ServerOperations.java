@@ -183,6 +183,10 @@ public class ServerOperations {
 		public boolean is(String code) {
 			return this.code.equals(code);
 		}
+
+		public CodeableConcept getCodeableConcept() {
+			return new CodeableConcept(new Coding(null, getCode(), getDisplay())).setText(getDisplay());
+		}
 	}
 
 	public static String BserReferralRecipientPractitionerRoleProfile = "http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ReferralRecipientPractitionerRole";
@@ -356,6 +360,21 @@ public class ServerOperations {
 		resource.setId(updateResponse.getId());
 	}
 
+	private OperationOutcome deleteResource(IBaseResource resource) {
+		if (fhirStore == null || fhirStore.isBlank() || resource == null) {
+			return null;
+		}
+
+		IGenericClient genericClient = StaticValues.myFhirContext.newRestfulGenericClient(fhirStore);
+		if (smartBackendServices.setFhirServerUrl(fhirStore).isActive()) {
+			BearerTokenAuthInterceptor authInterceptor = getBearerTokenAuthInterceptor();
+			genericClient.registerInterceptor(authInterceptor);
+		}
+
+		MethodOutcome createResponse = genericClient.delete().resource(resource).execute();
+		return (OperationOutcome) createResponse.getOperationOutcome();
+	}
+
 	private OperationOutcome constructErrorOO(String fhirPath, String message) {
 		OperationOutcome oo = new OperationOutcome();
 		oo.setId(UUID.randomUUID().toString());
@@ -371,7 +390,7 @@ public class ServerOperations {
 		return oo;
 	}
 
-	private void sendInternalErrorOO(String fhirPath, String msg) {
+	private void sendInternalErrorOO(String fhirPath, String msg) throws  InternalErrorException {
 		OperationOutcome oo = constructErrorOO(fhirPath, msg);
 		throw new InternalErrorException(msg, oo);
 	}
@@ -548,6 +567,7 @@ public class ServerOperations {
 		// ServiceRequest is required.
 		if (theServiceRequest == null) {
 			sendInternalErrorOO("Parameters.parameter.where(name='referral').empty()", "Referral is missing");
+			return null;
 		}
 
 		// If we received this request, it means we are submitting the referral so it shouldn't be ACTIVE
@@ -768,7 +788,7 @@ public class ServerOperations {
 			// Construct one as best as you can
 			// See if we can get some information from targetEhrPractitionerRole.
 			// If we had a reference, we should've been able to get it from include. 
-			// See if we have identifer ane/or display
+			// See if we have identifier ane/or display
 			Reference targetOrgReferenceIn = targetEhrPractitionerRole.getOrganization();
 			targetOrganization.addType(new CodeableConcept(new Coding("http://terminology.hl7.org/CodeSystem/organization-type", "bus", "Non-Healthcare Business or Corporation")));
 			if (targetOrgReferenceIn != null && !targetOrgReferenceIn.isEmpty()) {
@@ -1250,6 +1270,8 @@ public class ServerOperations {
 					bodyHeightReference, 
 					bodyWeightReference, 
 					bmiReference));
+
+				serviceRequest.setReasonCode(new ArrayList<CodeableConcept>(Arrays.asList(ServiceType.ARTHRITIS.getCodeableConcept())));
 				// supportingInfo.getMeta().addProfile("http://hl7.org/fhir/us/bser/StructureDefinition/BSeR-ArthritisReferralSupportingInformation");
 			} else if (ServiceType.DIABETES_PREVENTION.is(theServiceType.getCode())) {
 				diabetesPreventionReferralSupportingInformations.add(BSERReferralRequestComposition.createDiabetesPreventionReferralSupportingInformation(null, 
@@ -1258,12 +1280,16 @@ public class ServerOperations {
 					bodyHeightReference, 
 					bodyWeightReference, 
 					bmiReference));
+
+				serviceRequest.setReasonCode(new ArrayList<CodeableConcept>(Arrays.asList(ServiceType.DIABETES_PREVENTION.getCodeableConcept())));					
 			} else if (ServiceType.EARLY_CHILDHOOD_NUTRITION.is(theServiceType.getCode())) {
 				earlyChildhoodNutritionReferralSupportingInformations.add(BSERReferralRequestComposition.createEarlyChildhoodNutritionReferralSupportingInformation(null,
 					earlyChildhoodNutritionObReferences,
 					bpReference, 
 					childHeightObservationReference, 
 					childWeightObservationReference));
+
+				serviceRequest.setReasonCode(new ArrayList<CodeableConcept>(Arrays.asList(ServiceType.EARLY_CHILDHOOD_NUTRITION.getCodeableConcept())));					
 			} else if (ServiceType.HYPERTENSION.is(theServiceType.getCode())) {
 				hypertensionReferralSupportingInformations.add(BSERReferralRequestComposition.createHypertensionReferralSupportingInformation(null, 
 					diagnosisConditionReferences, 
@@ -1271,6 +1297,8 @@ public class ServerOperations {
 					bodyHeightReference, 
 					bodyWeightReference, 
 					bmiReference));
+
+				serviceRequest.setReasonCode(new ArrayList<CodeableConcept>(Arrays.asList(ServiceType.HYPERTENSION.getCodeableConcept())));					
 			} else if (ServiceType.OBESITY.is(theServiceType.getCode())) {
 				obesityReferralSupportingInformations.add(BSERReferralRequestComposition.createObesityReferralSupportingInformation(null, 
 					allergyReferences, 
@@ -1278,11 +1306,15 @@ public class ServerOperations {
 					bodyHeightReference, 
 					bodyWeightReference, 
 					bmiReference));
+
+				serviceRequest.setReasonCode(new ArrayList<CodeableConcept>(Arrays.asList(ServiceType.OBESITY.getCodeableConcept())));					
 			} else if (ServiceType.TOBACCO_USE_CESSATION.is(theServiceType.getCode())) {
 				tobaccoUseCessationReferralSupportingInformations.add(BSERReferralRequestComposition.createTobaccoUseCessationReferralSupportingInformation(null, 
 					nrtAuthorizationStatusReferences, 
 					smokingStatusReference, 
 					communicationPreferencesReferences));
+
+				serviceRequest.setReasonCode(new ArrayList<CodeableConcept>(Arrays.asList(ServiceType.TOBACCO_USE_CESSATION.getCodeableConcept())));					
 			} 
 		} else {
 			throw new FHIRException("ServiceType is missing.");
@@ -1371,6 +1403,18 @@ public class ServerOperations {
 		serviceRequest.setOccurrence(new DateTimeType(new Date()));
 
 		saveResource(serviceRequest);
+		OperationOutcome deleteOO = deleteResource(theServiceRequest);
+		if (deleteOO != null) {
+			String msg = "DELETE ServiceRequest/" + theServiceRequest.getIdElement().getIdPart() + ": " + 
+				deleteOO.getIssueFirstRep().getDetails().getCodingFirstRep().getCode();
+			
+			if (!warningMessage.isBlank()) {
+				warningMessage = warningMessage.concat(" " + msg);
+			} else {
+				warningMessage = warningMessage.concat(msg);
+			}
+		}
+
 		Reference serviceRequestReference = new Reference(serviceRequest.fhirType() + "/" + serviceRequest.getIdPart());
 		BSERReferralTask bserReferralTask = new BSERReferralTask(
 			identifierSystem, uniqueIdentifierValue,
@@ -1669,6 +1713,20 @@ public class ServerOperations {
 		task.setOutput(taskOutComps);
 	}
 
+	private Identifier getIdentifierByType(Task task, Coding codingParam) {
+		for (Identifier taskIdentifier : task.getIdentifier()) {
+			CodeableConcept type = taskIdentifier.getType();
+			for (Coding coding : type.getCoding()) {
+				if (codingParam.getSystem().equals(coding.getSystem())
+					&& codingParam.getCode().equals(coding.getCode())) {
+						return taskIdentifier;
+				}
+			}
+		}
+
+		return null;
+	}
+
 	/***
 	 * processMessageOperation
 	 * @param theContent
@@ -1889,19 +1947,24 @@ public class ServerOperations {
 					// Get and Update Business Status in the Task in the FHIR Store
 					// Get PLAC identifier.value.
 					String PLACvalue = null;
-					for (Identifier taskIdentifier : bserReferralTask.getIdentifier()) {
-						CodeableConcept type = taskIdentifier.getType();
-						for (Coding coding : type.getCoding()) {
-							if ("http://terminology.hl7.org/CodeSystem/v2-0203".equals(coding.getSystem())
-								&& "PLAC".equals(coding.getCode())) {
-									PLACvalue = taskIdentifier.getValue();
-									break;
-							}
-						}
+					// for (Identifier taskIdentifier : bserReferralTask.getIdentifier()) {
+					// 	CodeableConcept type = taskIdentifier.getType();
+					// 	for (Coding coding : type.getCoding()) {
+					// 		if ("http://terminology.hl7.org/CodeSystem/v2-0203".equals(coding.getSystem())
+					// 			&& "PLAC".equals(coding.getCode())) {
+					// 				PLACvalue = taskIdentifier.getValue();
+					// 				break;
+					// 		}
+					// 	}
 
-						if (PLACvalue != null && !PLACvalue.isEmpty()) {
-							break;
-						}
+					// 	if (PLACvalue != null && !PLACvalue.isEmpty()) {
+					// 		break;
+					// 	}
+					// }
+
+					Identifier placIdentifier = getIdentifierByType(bserReferralTask, new Coding("http://terminology.hl7.org/CodeSystem/v2-0203", "PLAC", null));
+					if (placIdentifier != null) {
+						PLACvalue = placIdentifier.getValue();
 					}
 
 					if (PLACvalue == null || PLACvalue.isEmpty()) {
@@ -1941,6 +2004,19 @@ public class ServerOperations {
 
 					// Get the business status from recipient bserReferralStatus and update the task.
 					myTask.setBusinessStatus(businessStatus);
+
+					// Set FILL information.
+					Identifier filllIdentifier = getIdentifierByType(bserReferralTask, new Coding("http://terminology.hl7.org/CodeSystem/v2-0203", "FILL", null));
+
+					if (filllIdentifier != null) {
+						// add or update fill identifier.
+						Identifier existingFillIdentifier = getIdentifierByType(myTask, new Coding("http://terminology.hl7.org/CodeSystem/v2-0203", "FILL", null));
+						if (existingFillIdentifier != null) {
+							filllIdentifier.copyValues(existingFillIdentifier);
+						} else {
+							myTask.addIdentifier(filllIdentifier);
+						}
+					}
 
 					// See if we have something in the output
 					for (TaskOutputComponent outputFromRecipient : bserReferralTask.getOutput()) {
