@@ -4,8 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import javax.servlet.ServletException;
-
 import org.springframework.web.cors.CorsConfiguration;
 
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
@@ -21,6 +19,7 @@ import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
 import edu.gatech.chai.bserengine.provider.ServerOperations;
 import edu.gatech.chai.bserengine.security.OIDCInterceptor;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
+import jakarta.servlet.ServletException;
 
 public class RestfulServerWithOpenApi extends RestfulServer {
     private static final long serialVersionUID = 1L;

@@ -146,6 +146,7 @@ import edu.gatech.chai.USCore.model.USCoreSmokingStatusObservation;
 import edu.gatech.chai.USCore.model.util.USCoreSmokingStatusObservationUtil;
 import edu.gatech.chai.USCore.model.USCoreAllergyIntolerance;
 import edu.gatech.chai.bserengine.security.RecipientAA;
+import edu.gatech.chai.bserengine.utilities.BserTaskBusinessStatus;
 import edu.gatech.chai.bserengine.utilities.StaticValues;
 
 public class ServerOperations {
@@ -1421,8 +1422,9 @@ public class ServerOperations {
 			null, null,
 			sourceOrganizationReference, 
 			targetOrganizationReference,
-			TaskStatus.REQUESTED, 
-			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "2.0", "Service Request Created")), 
+			TaskStatus.REQUESTED,
+			BserTaskBusinessStatus.SERVICE_REQUEST_CREATED.getCodeableConcept(),
+//			new CodeableConcept(new Coding("http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS", "2.0", "Service Request Created")), 
 			serviceRequestReference, 
 			subjectReference,
 			new Date(), 
@@ -1877,8 +1879,8 @@ public class ServerOperations {
 						task.setStatus(TaskStatus.FAILED);					
 						serviceRequest.setStatus(ServiceRequestStatus.REVOKED);
 					} else {
-						task.setStatus(TaskStatus.COMPLETED);					
-						serviceRequest.setStatus(ServiceRequestStatus.COMPLETED);
+						task.setStatus(TaskStatus.RECEIVED);					
+						serviceRequest.setStatus(ServiceRequestStatus.ACTIVE);
 					}
 
 					if (oo != null && !oo.isEmpty()) {
@@ -1977,7 +1979,8 @@ public class ServerOperations {
 						fhirStore, 
 						Task.class, 
 						Task.IDENTIFIER.exactly().code(PLACvalue),
-						Task.INCLUDE_SUBJECT);
+						Task.INCLUDE_SUBJECT,
+						Task.INCLUDE_FOCUS);
 		
 					if (searchBundle.getTotal() == 0) {
 						throw new FHIRException("NO Matching Task Found.");
@@ -1986,11 +1989,14 @@ public class ServerOperations {
 					// loop through the search result entry and get task and patient
 					Patient myPatient = null;
 					Task myTask = null;
+					ServiceRequest myServiceRequest = null;
 					for (BundleEntryComponent TaskEntry : searchBundle.getEntry()) {
 						if (TaskEntry.getResource() instanceof Task) {
 							myTask = (Task) TaskEntry.getResource();
 						} else if (TaskEntry.getResource() instanceof Patient) {
 							myPatient = (Patient) TaskEntry.getResource();
+						} else if (TaskEntry.getResource() instanceof ServiceRequest) {
+							myServiceRequest = (ServiceRequest) TaskEntry.getResource();
 						}
 					}
 
@@ -2004,6 +2010,11 @@ public class ServerOperations {
 
 					// Get the business status from recipient bserReferralStatus and update the task.
 					myTask.setBusinessStatus(businessStatus);
+					myTask.setStatus(BserTaskBusinessStatus.taskStatusFromCodeableConcept(businessStatus));
+
+					if (myServiceRequest != null) {
+						myServiceRequest.setStatus(BserTaskBusinessStatus.serviceRequestStatusFromCodeableConcept(businessStatus));
+					}
 
 					// Set FILL information.
 					Identifier filllIdentifier = getIdentifierByType(bserReferralTask, new Coding("http://terminology.hl7.org/CodeSystem/v2-0203", "FILL", null));
@@ -2073,7 +2084,9 @@ public class ServerOperations {
 							} 
 						}
 					}
-
+					if (myServiceRequest != null) {
+						updateResource(myServiceRequest);
+					}
 					updateResource(myTask);
 				}	
 			} else {

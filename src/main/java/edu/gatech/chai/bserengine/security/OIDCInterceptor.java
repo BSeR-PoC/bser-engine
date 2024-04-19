@@ -16,14 +16,10 @@
 
 package edu.gatech.chai.bserengine.security;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.oltu.oauth2.common.exception.OAuthProblemException;
-import org.apache.oltu.oauth2.common.exception.OAuthSystemException;
-import org.apache.oltu.oauth2.common.message.types.ParameterStyle;
-import org.apache.oltu.oauth2.rs.request.OAuthAccessResourceRequest;
 
 import ca.uhn.fhir.rest.api.RequestTypeEnum;
 import ca.uhn.fhir.rest.api.RestOperationTypeEnum;
@@ -136,19 +132,12 @@ public class OIDCInterceptor extends InterceptorAdapter {
 				ex.addAuthenticateHeaderForRealm("OmopOnFhir");
 				throw ex;
 			}	
-		} else if ("bearer".equalsIgnoreCase(prefix)) {			
-			try {
-				OAuthAccessResourceRequest oauthRequest = new OAuthAccessResourceRequest(theRequest, ParameterStyle.HEADER);
-				String accessToken = oauthRequest.getAccessToken();
+		} else if ("bearer".equalsIgnoreCase(prefix)) {
+			String accessToken = authHeader.substring(7);
 
-				// check if this is local static bearer token
-				if (authBearer.equals(accessToken)) {
-					// this is for testing. We don't do further processing
-					return true;
-				}
-			} catch (OAuthSystemException | OAuthProblemException e) {
-				e.printStackTrace();
-				throw new AuthenticationException("Failed to get access token");
+			// check if this is local static bearer token
+			if (authBearer.equals(accessToken)) {
+				return true;
 			}
 			
 			// checking Auth
@@ -173,8 +162,7 @@ public class OIDCInterceptor extends InterceptorAdapter {
 			ourLog.debug("Adding auth object to RequestDetails attribute");
 			theRequestDetails.setAttribute(OIDCInterceptor.authKeyName, myAuth);
 
-			retVal = true;
-			postRequestHandled(theRequestDetails);
+			return true;
 		} else {
 			AuthenticationException ex = new AuthenticationException("No Valid Authorization Header Found");
 			ex.addAuthenticateHeaderForRealm("OmopOnFhir");

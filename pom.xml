@@ -16,7 +16,7 @@
 	<groupId>edu.gatech.chai</groupId>
 	<artifactId>bser-engine</artifactId>
 	<packaging>war</packaging>
-	<version>0.4.0</version>
+	<version>0.5.0</version>
 
 	<name>BSeR Engine Server</name>
 
@@ -31,8 +31,8 @@
 	</repositories>
 
 	<properties>
-		<hapi_stable_version>6.8.2</hapi_stable_version>
-		<bser_library_version>0.2.4</bser_library_version>
+		<hapi_stable_version>7.0.0</hapi_stable_version>
+		<bser_library_version>0.2.5</bser_library_version>
 		<smartonfhir-helper-version>0.0.3</smartonfhir-helper-version>
 
 		<!-- configure timestamp in MANIFEST.MF for maven-war-provider -->
@@ -53,7 +53,7 @@
 		<phloc_schematron_version>5.2.0</phloc_schematron_version>
 		<phloc_commons_version>9.3.8</phloc_commons_version>
 
-		<spring_version>5.3.27</spring_version>
+		<spring_version>6.1.4</spring_version>
 		<spring_data_version>2.2.0.RELEASE</spring_data_version>
 		<spring-boot.version>2.2.0.RELEASE</spring-boot.version>
 
@@ -130,11 +130,12 @@
 			<version>1.4.14</version>
 		</dependency>
 
-		<!-- Needed for JEE/Servlet support -->
+		<!-- https://mvnrepository.com/artifact/jakarta.servlet/jakarta.servlet-api -->
 		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>javax.servlet-api</artifactId>
-			<version>3.1.0</version>
+			<groupId>jakarta.servlet</groupId>
+			<artifactId>jakarta.servlet-api</artifactId>
+			<version>6.1.0-M2</version>
+			<scope>provided</scope>
 		</dependency>
 
 		<!-- If you are using HAPI narrative generation, you will need to include 
@@ -419,7 +420,7 @@
 			<plugin>
 				<groupId>org.eclipse.jetty</groupId>
 				<artifactId>jetty-maven-plugin</artifactId>
-				<version>10.0.11</version>
+				<version>11.0.20</version>
 			</plugin>
 		</plugins>
 	</build>
