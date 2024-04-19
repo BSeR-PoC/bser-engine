@@ -43,16 +43,14 @@
 		<!-- Dependency Versions -->
 		<derby_version>10.14.2.0</derby_version>
 		<jersey_version>2.25.1</jersey_version>
-		<jetty_version>9.4.49.v20220914</jetty_version>
+		<jetty_version>12.0.3</jetty_version>
 
-		<jackson_version>2.15.2</jackson_version>
+		<jackson_version>2.16.1</jackson_version>
 		<jaxb_api_version>2.3.1</jaxb_api_version>
 		<lucene_version>5.5.5</lucene_version>
-		<maven_assembly_plugin_version>3.1.0</maven_assembly_plugin_version>
+		<maven_assembly_plugin_version>3.3.0</maven_assembly_plugin_version>
 		<maven_license_plugin_version>1.8</maven_license_plugin_version>
-		<phloc_schematron_version>5.2.0</phloc_schematron_version>
-		<phloc_commons_version>9.3.8</phloc_commons_version>
-
+		
 		<spring_version>6.1.4</spring_version>
 		<spring_data_version>2.2.0.RELEASE</spring_data_version>
 		<spring-boot.version>2.2.0.RELEASE</spring-boot.version>
@@ -62,7 +60,7 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<ebay_cors_filter_version>1.0.1</ebay_cors_filter_version>
 
-		<ucum_version>1.0.2</ucum_version>
+		<ucum_version>1.0.8</ucum_version>
 	</properties>
 
 	<dependencies>
@@ -105,18 +103,6 @@
 			<version>${hapi_stable_version}</version>
 		</dependency>
 
-		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-core</artifactId>
-			<version>1.4.14</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-api</artifactId>
-			<version>2.0.4</version>
-		</dependency>
-
 		<!-- HAPI-FHIR uses Logback for logging support. The logback library is 
 			included automatically by Maven as a part of the hapi-fhir-base dependency, 
 			but you also need to include a logging library. Logback is used here, but 
@@ -127,6 +113,12 @@
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>
+			<version>1.4.14</version>
+		</dependency>
+
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-core</artifactId>
 			<version>1.4.14</version>
 		</dependency>
 
@@ -200,11 +192,6 @@
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-core</artifactId>
 			<version>${spring_version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.data</groupId>
-			<artifactId>spring-data-jpa</artifactId>
-			<version>${spring_data_version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework</groupId>
@@ -294,66 +281,6 @@
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
 			<version>4.5.13</version>
-		</dependency>
-
-		<!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
-		<dependency>
-			<groupId>com.github.ben-manes.caffeine</groupId>
-			<artifactId>caffeine</artifactId>
-			<version>2.7.0</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.eclipse.jetty.websocket</groupId>
-			<artifactId>websocket-api</artifactId>
-			<version>${jetty_version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty.websocket</groupId>
-			<artifactId>websocket-client</artifactId>
-			<version>${jetty_version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-http</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-servlets</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-servlet</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-server</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-util</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-webapp</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.jetty.websocket</groupId>
-			<artifactId>websocket-server</artifactId>
-			<version>${jetty_version}</version>
-			<scope>test</scope>
 		</dependency>
 
 		<dependency>
