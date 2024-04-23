@@ -2009,7 +2009,9 @@ public class ServerOperations {
 					}
 
 					// Get the business status from recipient bserReferralStatus and update the task.
-					myTask.setBusinessStatus(businessStatus);
+					// We trust what's in the status. But, just to be sure, we reconstruct the codeable concept
+					// from the code.
+					myTask.setBusinessStatus(BserTaskBusinessStatus.bserTaskBusinessStatusFromCode(businessStatus.getCodingFirstRep().getCode()).getCodeableConcept());
 					myTask.setStatus(BserTaskBusinessStatus.taskStatusFromCodeableConcept(businessStatus));
 
 					if (myServiceRequest != null) {

@@ -16,7 +16,7 @@
 	<groupId>edu.gatech.chai</groupId>
 	<artifactId>bser-engine</artifactId>
 	<packaging>war</packaging>
-	<version>0.5.0</version>
+	<version>1.0.2</version>
 
 	<name>BSeR Engine Server</name>
 
@@ -31,9 +31,9 @@
 	</repositories>
 
 	<properties>
-		<hapi_stable_version>7.0.0</hapi_stable_version>
-		<bser_library_version>0.2.5</bser_library_version>
-		<smartonfhir-helper-version>0.0.3</smartonfhir-helper-version>
+		<hapi_stable_version>7.0.2</hapi_stable_version>
+		<bser_library_version>0.2.6</bser_library_version>
+		<smartonfhir-helper-version>0.1.0</smartonfhir-helper-version>
 
 		<!-- configure timestamp in MANIFEST.MF for maven-war-provider -->
 		<maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
@@ -100,6 +100,12 @@
 	    <dependency>
 			<groupId>ca.uhn.hapi.fhir</groupId>
 			<artifactId>hapi-fhir-structures-r4</artifactId>
+			<version>${hapi_stable_version}</version>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/ca.uhn.hapi.fhir/hapi-fhir-caching-caffeine -->
+		<dependency>
+			<groupId>ca.uhn.hapi.fhir</groupId>
+			<artifactId>hapi-fhir-caching-caffeine</artifactId>
 			<version>${hapi_stable_version}</version>
 		</dependency>
 

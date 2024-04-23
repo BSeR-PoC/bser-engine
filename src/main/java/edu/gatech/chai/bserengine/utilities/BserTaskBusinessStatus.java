@@ -15,7 +15,8 @@ public enum BserTaskBusinessStatus {
     SERVICE_REQUEST_EVENT_COMPLETED("Service Request Event Completed", "5.1.4", TaskStatus.COMPLETED, ServiceRequestStatus.COMPLETED),
     SERVICE_REQUEST_CANCELLATION_REQUESTED("Service Request Cancellation Requested", "5.2", TaskStatus.INPROGRESS, ServiceRequestStatus.ACTIVE),
     SERVICE_REQUEST_FULFILLMENT_CANCELLED("Service Request Fulfillment Cancelled", "6.0", TaskStatus.CANCELLED, ServiceRequestStatus.REVOKED),
-    SERVICE_REQUEST_FULFILLMENT_COMPLETED("Service Request Fulfillment Completed", "7.0", TaskStatus.COMPLETED, ServiceRequestStatus.COMPLETED);
+    SERVICE_REQUEST_FULFILLMENT_COMPLETED("Service Request Fulfillment Completed", "7.0", TaskStatus.COMPLETED, ServiceRequestStatus.COMPLETED),
+    NULL("", "", TaskStatus.NULL, ServiceRequestStatus.NULL);
     
     public static String SYSTEM = "http://hl7.org/fhir/us/bser/CodeSystem/TaskBusinessStatusCS";
 
@@ -46,6 +47,16 @@ public enum BserTaskBusinessStatus {
         }
 
         return ServiceRequestStatus.NULL;
+    }
+
+    public static BserTaskBusinessStatus bserTaskBusinessStatusFromCode(String code) {
+        for (BserTaskBusinessStatus businessStatus : BserTaskBusinessStatus.values()) {
+            if (businessStatus.code.equals(code)) {
+                return businessStatus;
+            }
+        }
+
+        return BserTaskBusinessStatus.NULL;
     }
 
     public static ServiceRequestStatus serviceRequestStatusFromCodeableConcept(CodeableConcept codeableConcept) {
