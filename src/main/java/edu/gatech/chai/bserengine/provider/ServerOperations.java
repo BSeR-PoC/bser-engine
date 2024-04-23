@@ -2060,22 +2060,28 @@ public class ServerOperations {
 
 													// substitute the patient
 													if (supportInfoResource instanceof Observation) {
-														String supportResourceSubjectRef = myPatient.getIdElement().toVersionless().getId();
-														((Observation)supportInfoResource).setSubject(new Reference(supportResourceSubjectRef));
+														// String supportResourceSubjectRef = myPatient.getIdElement().toVersionless().getId();
+														String subjectName = myPatient.getNameFirstRep().getGivenAsSingleString() + " " + myPatient.getNameFirstRep().getFamily();
+														Reference subjectReference = new Reference("Patient" + "/" + myPatient.getIdPart()).setDisplay(subjectName);
+														((Observation)supportInfoResource).setSubject(subjectReference);
 													} 
 													
 													saveResource(supportInfoResource);
 													// sectionEntryReference.setResource(supportInfoResource);
+													// resource.fhirType()+"/"+resource.getIdPart()
 													sectionEntryReference.setReferenceElement(supportInfoResource.getIdElement());
-													bserReferralFeedbackDocEntry.setFullUrl(supportInfoResource.getIdElement().toVersionless().getId());
+													bserReferralFeedbackDocEntry.setFullUrl(supportInfoResource.fhirType()+"/"+supportInfoResource.getIdPart());
 												}
 											}
 										}
 									}
 
 									
-									saveResource(bserReferralFeedbackDocument);
 									saveResource(bserReferralFeedbacDocComposition);
+									// update composition id in document.
+									bserReferralFeedbackDocument.getEntryFirstRep().setFullUrl("Composition/" + bserReferralFeedbacDocComposition.getIdPart());
+									bserReferralFeedbackDocument.getEntryFirstRep().getResource().setId(bserReferralFeedbacDocComposition.getIdPart());
+									saveResource(bserReferralFeedbackDocument);
 									TaskOutputComponent myOutputFromRecipient = new TaskOutputComponent(outputFromRecipient.getType(), new Reference(bserReferralFeedbackDocument.getIdElement()));
 									myTask.addOutput(myOutputFromRecipient);
 
