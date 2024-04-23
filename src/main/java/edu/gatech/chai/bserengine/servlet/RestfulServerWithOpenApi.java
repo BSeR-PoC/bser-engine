@@ -34,7 +34,7 @@ public class RestfulServerWithOpenApi extends RestfulServer {
 	@Override
 	public void initialize() throws ServletException {
 		// Set server name
-		setServerName("BSeR v1.0.0 - FHIR R4");
+		setServerName("BSeR v0.5.0");
 
 		// If we have system environment variable to hardcode the base URL, do it now.
 		String serverBaseUrl = System.getenv("SERVERBASE_URL");
