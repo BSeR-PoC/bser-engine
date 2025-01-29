@@ -16,7 +16,7 @@
 	<groupId>edu.gatech.chai</groupId>
 	<artifactId>bser-engine</artifactId>
 	<packaging>war</packaging>
-	<version>1.0.2</version>
+	<version>1.0.3</version>
 
 	<name>BSeR Engine Server</name>
 
@@ -31,9 +31,9 @@
 	</repositories>
 
 	<properties>
-		<hapi_stable_version>7.0.2</hapi_stable_version>
-		<bser_library_version>0.2.6</bser_library_version>
-		<smartonfhir-helper-version>0.1.0</smartonfhir-helper-version>
+		<hapi_stable_version>7.6.1</hapi_stable_version>
+		<bser_library_version>0.2.7</bser_library_version>
+		<smartonfhir-helper-version>0.1.1</smartonfhir-helper-version>
 
 		<!-- configure timestamp in MANIFEST.MF for maven-war-provider -->
 		<maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
@@ -51,8 +51,7 @@
 		<maven_assembly_plugin_version>3.3.0</maven_assembly_plugin_version>
 		<maven_license_plugin_version>1.8</maven_license_plugin_version>
 		
-		<spring_version>6.1.4</spring_version>
-		<spring_data_version>2.2.0.RELEASE</spring_data_version>
+		<spring_version>6.1.14</spring_version>
 		<spring-boot.version>2.2.0.RELEASE</spring-boot.version>
 
 		<thymeleaf-version>3.1.2.RELEASE</thymeleaf-version>
@@ -60,7 +59,7 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<ebay_cors_filter_version>1.0.1</ebay_cors_filter_version>
 
-		<ucum_version>1.0.8</ucum_version>
+		<ucum_version>1.0.9</ucum_version>
 	</properties>
 
 	<dependencies>
